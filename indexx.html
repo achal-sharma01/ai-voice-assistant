@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Astra – Pro Voice Assistant (Mobile)</title>
+<meta name="theme-color" content="#0ea5e9"/>
+<style>
+:root{--bg:#0b1220;--card:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--accent:#0ea5e9;--good:#22c55e;--bad:#ef4444}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:linear-gradient(180deg,#0b1220,#0a1020);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial}
+.wrap{max-width:640px;margin:0 auto;padding:18px}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:18px;backdrop-filter:blur(8px);box-shadow:0 10px 40px rgba(0,0,0,.35)}
+h1{font-size:22px;margin:0 0 6px} .sub{color:var(--muted);font-size:14px;margin:0 0 12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.badge{font-size:12px;padding:6px 10px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.input,select,button{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(2,6,23,.45);color:var(--text);font-size:14px}
+.btn{cursor:pointer} .btn.accent{background:linear-gradient(180deg,rgba(14,165,233,.25),rgba(14,165,233,.06));border-color:rgba(14,165,233,.5)}
+.mic{width:120px;height:120px;border-radius:999px;margin:12px auto;display:grid;place-items:center;background:radial-gradient(60% 60% at 50% 30%,rgba(14,165,233,.25),transparent),linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));box-shadow:inset 0 0 0 2px rgba(14,165,233,.35),0 10px 30px rgba(14,165,233,.25);border:0;font-size:34px}
+.mic.live{box-shadow:inset 0 0 0 3px rgba(34,197,94,.6),0 10px 30px rgba(34,197,94,.35)}
+.status{display:flex;gap:8px;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad)} .dot.ok{background:var(--good)}
+.section{margin-top:12px}
+.tile{background:rgba(2,6,23,.5);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile h3{margin:0 0 6px;font-size:12px;color:var(--muted)} .tile p{margin:0;font-size:18px}
+.switch{display:flex;align-items:center;gap:10px}
+.switch input{width:auto}
+.log{height:180px;overflow:auto;background:rgba(2,6,23,.5);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px;font-size:13px}
+.log p{margin:6px 0}
+small.note{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🤖 Astra — Pro Voice Assistant</h1>
+    <p class="sub">Mobile web app. Wake word <b>“Astra”</b> or Always-on. Speaks, shows live dashboard, manual controls, and daily report. (Offline simulator built-in.)</p>
+
+    <div class="row">
+      <span class="badge">Wake: <b>Astra</b></span>
+      <span class="badge">Mode:
+        <select id="always" class="input" style="width:auto;display:inline-block">
+          <option value="0" selected>Wake word</option>
+          <option value="1">Always-on</option>
+        </select>
+      </span>
+      <span class="badge">Simulator:
+        <select id="sim" class="input" style="width:auto;display:inline-block">
+          <option value="1" selected>On</option>
+          <option value="0">Off</option>
+        </select>
+      </span>
+      <span class="badge">TTS rate:
+        <select id="rate" class="input" style="width:auto;display:inline-block">
+          <option>170</option><option selected>185</option><option>200</option>
+        </select>
+      </span>
+    </div>
+
+    <button id="micBtn" class="mic" title="Start/Stop">🎤</button>
+    <div class="status"><span id="dot" class="dot"></span><span id="status">Idle</span></div>
+
+    <div class="section kpis">
+      <div class="tile"><h3>Light</h3><p id="kLight">OFF</p></div>
+      <div class="tile"><h3>Fan</h3><p id="kFan">OFF</p></div>
+      <div class="tile"><h3>People</h3><p id="kPeople">1</p></div>
+      <div class="tile"><h3>Temp (°C)</h3><p id="kTemp">27.0</p></div>
+      <div class="tile"><h3>Humidity (%)</h3><p id="kHum">48.0</p></div>
+      <div class="tile"><h3>Commands</h3><p id="kCmds">0</p></div>
+    </div>
+
+    <div class="section grid">
+      <label class="tile switch">
+        <h3 style="min-width:60px;margin:0">Light</h3>
+        <input id="swLight" type="checkbox"/><span>Toggle</span>
+      </label>
+      <label class="tile switch">
+        <h3 style="min-width:60px;margin:0">Fan</h3>
+        <input id="swFan" type="checkbox"/><span>Toggle</span>
+      </label>
+    </div>
+
+    <div class="section grid">
+      <button class="btn accent" id="btnReport">Speak Daily Report</button>
+      <button class="btn" id="btnReset">Reset Counters</button>
+    </div>
+
+    <div class="section log" id="log" aria-live="polite"></div>
+    <p class="sub"><small class="note">Try: “Astra hello”, “Astra what’s the time”, “Astra temperature / humidity / people”, “Astra turn on/off light / fan”, “Astra report”, “Astra stop”.</small></p>
+  </div>
+</div>
+
+<script>
+const WAKE="astra";
+let listening=false, rec=null, lastHeard="";
+let cache={light:0, fan:0, temp:27.0, hum:48.0, people:1};
+let counters={cmds:0};
+
+const el=(id)=>document.getElementById(id);
+const logBox=el('log'), dot=el('dot'), statusEl=el('status');
+const kLight=el('kLight'), kFan=el('kFan'), kTemp=el('kTemp'), kHum=el('kHum'), kPeople=el('kPeople'), kCmds=el('kCmds');
+const swLight=el('swLight'), swFan=el('swFan'), rateSel=el('rate'), always=el('always'), sim=el('sim'), micBtn=el('micBtn');
+
+function log(t){const p=document.createElement('p');p.textContent=t;logBox.appendChild(p);logBox.scrollTop=logBox.scrollHeight;}
+function setStatus(t,ok){statusEl.textContent=t;dot.classList.toggle('ok',!!ok);}
+function refreshTiles(){
+  kLight.textContent = cache.light? "ON":"OFF";
+  kFan.textContent   = cache.fan?   "ON":"OFF";
+  kTemp.textContent  = cache.temp.toFixed(1);
+  kHum.textContent   = cache.hum.toFixed(1);
+  kPeople.textContent= cache.people;
+  kCmds.textContent  = counters.cmds;
+  swLight.checked = !!cache.light;
+  swFan.checked   = !!cache.fan;
+}
+
+function speak(text){
+  try{
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate = parseInt(rateSel.value,10)/185; u.pitch=1;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+    log("Astra: "+text);
+  }catch(e){console.warn("TTS error",e)}
+}
+
+function simulateSensors(){
+  if(sim.value!=="1") return;
+  cache.temp = Math.max(20, Math.min(35, cache.temp + (Math.random()*0.4-0.2)));
+  cache.hum  = Math.max(30, Math.min(70, cache.hum  + (Math.random()*0.8-0.4)));
+  if(Math.random()<0.25){ cache.people = Math.max(0, cache.people + (Math.random()<0.5?-1:1)); }
+  refreshTiles();
+}
+setInterval(simulateSensors, 1200);
+
+function intent(text){
+  const t=text.toLowerCase().trim();
+  let s=t;
+  if (always.value!=="1"){
+    if(!t.includes(WAKE)) return {type:"idle"};
+    s=t.split(WAKE).slice(1).join(" ").trim();
+    if(!s) return {type:"idle"};
+  }
+  if(/(hello|hi|hey|good (morning|afternoon|evening))/.test(s)) return {type:"greet"};
+  if(/how are you/.test(s)) return {type:"how"};
+  if(/(what'?s|tell) (the )?time|time now/.test(s)) return {type:"time"};
+  if(/temperature|temp|how hot/.test(s)) return {type:"temp"};
+  if(/humidity|how humid/.test(s)) return {type:"hum"};
+  if(/people|count|person/.test(s)) return {type:"people"};
+  if(/(turn|switch) on (the )?light|light on/.test(s)) return {type:"light",val:1};
+  if(/(turn|switch) off (the )?light|light off/.test(s)) return {type:"light",val:0};
+  if(/(turn|switch) on (the )?fan|fan on/.test(s)) return {type:"fan",val:1};
+  if(/(turn|switch) off (the )?fan|fan off/.test(s)) return {type:"fan",val:0};
+  if(/report|summary|status/.test(s)) return {type:"report"};
+  if(/stop|exit|quit/.test(s)) return {type:"stop"};
+  return {type:"chat", raw:s};
+}
+
+function setDevice(dev,val){
+  cache[dev]=val?1:0; refreshTiles();
+  speak(val?`Turning on the ${dev}.`:`Turning the ${dev} off.`);
+}
+function makeReport(){
+  const parts=[];
+  parts.push(`Commands today: ${counters.cmds}.`);
+  parts.push(`Light is ${cache.light?'on':'off'}. Fan is ${cache.fan?'on':'off'}.`);
+  parts.push(`Temperature ${cache.temp.toFixed(1)} degrees Celsius, humidity ${cache.hum.toFixed(1)} percent.`);
+  parts.push(`People count ${cache.people}.`);
+  return parts.join(" ");
+}
+function handleIntent(res){
+  switch(res.type){
+    case "idle": return;
+    case "greet":{
+      const h=new Date().getHours();
+      const g=h<12?"Good morning":h<18?"Good afternoon":"Good evening";
+      return speak(`${g}, Achal. How can I help?`);
+    }
+    case "how": return speak("All systems ready.");
+    case "time": return speak("It's "+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+    case "temp": return speak(`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`);
+    case "hum":  return speak(`Humidity is ${cache.hum.toFixed(1)} percent.`);
+    case "people": return speak(`People in room: ${cache.people}.`);
+    case "light": counters.cmds++; return setDevice("light",res.val);
+    case "fan":   counters.cmds++; return setDevice("fan",res.val);
+    case "report": return speak(makeReport());
+    case "stop": stopListening(); return speak("Stopping now. Bye!");
+    case "chat": return speak(["Okay.","Noted.","I hear you.","Sure."][Math.floor(Math.random()*4)]+" "+res.raw);
+  }
+}
+
+function getRecognizer(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ alert("SpeechRecognition not supported. Use Chrome on Android with HTTPS."); return null; }
+  const r = new SR();
+  r.lang="en-US"; r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
+  r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
+  r.onend=()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening) r.start(); };
+  r.onerror=(e)=>{ log("STT error: "+(e.error||"unknown")); };
+  r.onresult=(e)=>{ const t=e.results[e.resultIndex][0].transcript; lastHeard=t; log("You: "+t); handleIntent(intent(t)); };
+  return r;
+}
+function startListening(){ if(listening) return; const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); rec.start(); }
+function stopListening(){ listening=false; try{ rec && rec.stop(); }catch{} }
+
+micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
+swLight.addEventListener('change', e=> handleIntent({type:"light", val: e.target.checked?1:0}));
+swFan.addEventListener('change', e=> handleIntent({type:"fan", val: e.target.checked?1:0}));
+document.getElementById('btnReport').addEventListener('click', ()=> speak(makeReport()));
+document.getElementById('btnReset').addEventListener('click', ()=>{ counters={cmds:0}; speak("Counters reset."); refreshTiles(); });
+
+setTimeout(()=> speak('Hi Achal, Astra is ready. Tap the mic and say "Astra".'),300);
+refreshTiles();
+</script>
+</body>
+</html>
