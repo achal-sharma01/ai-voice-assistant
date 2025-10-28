@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Astra – Voice Assistant (Mobile)</title>
+<meta name="theme-color" content="#0ea5e9" />
+<!-- Keep the code minimal for phone mic + TTS -->
+<script>
+const wake="astra";
+let listening=false,last="";
+function speak(t){speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(t);u.rate=1;u.pitch=1;speechSynthesis.speak(u);log("Astra: "+t);}
+function log(x){let p=document.createElement("p");p.textContent=x;document.querySelector("#log").appendChild(p);}
+function intent(t){t=t.toLowerCase();if(!t.includes(wake))return;let s=t.split(wake)[1].trim();
+if(/(hello|hi|hey)/.test(s))return speak("Hello Achal!");
+if(/how are you/.test(s))return speak("I am good and ready.");
+if(/time/.test(s))return speak("It's "+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+if(/turn on light/.test(s))return speak("Turning on the light.");
+if(/turn off light/.test(s))return speak("Turning off the light.");
+if(/turn on fan/.test(s))return speak("Turning on the fan.");
+if(/turn off fan/.test(s))return speak("Turning off the fan.");
+if(/stop/.test(s)){speak("Stopping now.");stop();return;}
+speak("Okay "+s);}
+function start(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return alert("Use Chrome/HTTPS");
+const r=new SR();r.lang="en-US";r.continuous=true;r.onresult=e=>{const t=e.results[e.resultIndex][0].transcript;last=t;log("You: "+t);intent(t)};
+r.onstart=()=>{document.querySelector("#st").textContent="🎙 Listening";};
+r.onend=()=>{document.querySelector("#st").textContent="Idle";if(listening)r.start();};
+r.start();listening=true;}
+function stop(){listening=false;speechSynthesis.cancel();}
+</script>
+</head>
+<body style="font-family:system-ui;background:#0b1220;color:#e5e7eb;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;text-align:center">
+<h2>🤖 Astra – Mobile Voice Assistant</h2>
+<p id="st">Idle</p>
+<button onclick="listening?stop():start()" style="padding:15px 30px;border:none;border-radius:10px;background:#0ea5e9;color:white;font-size:16px">🎤 Tap to Talk</button>
+<div id="log" style="margin-top:20px;width:90%;max-width:400px;height:200px;overflow:auto;text-align:left;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px;font-size:14px;background:rgba(255,255,255,.05)"></div>
+</body>
+</html>
