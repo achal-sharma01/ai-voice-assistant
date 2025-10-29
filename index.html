@@ -2,208 +2,143 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Astra – Pro Voice Assistant (Mobile)</title>
-<meta name="theme-color" content="#0ea5e9"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Astra – ESB (Always-on, TTS-mute)</title>
 <style>
-:root{--bg:#0b1220;--card:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--accent:#0ea5e9;--good:#22c55e;--bad:#ef4444}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:linear-gradient(180deg,#0b1220,#0a1020);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial}
-.wrap{max-width:640px;margin:0 auto;padding:18px}
-.card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:18px;backdrop-filter:blur(8px);box-shadow:0 10px 40px rgba(0,0,0,.35)}
-h1{font-size:22px;margin:0 0 6px} .sub{color:var(--muted);font-size:14px;margin:0 0 12px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.badge{font-size:12px;padding:6px 10px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:var(--muted)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.input,select,button{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(2,6,23,.45);color:var(--text);font-size:14px}
-.btn{cursor:pointer} .btn.accent{background:linear-gradient(180deg,rgba(14,165,233,.25),rgba(14,165,233,.06));border-color:rgba(14,165,233,.5)}
-.mic{width:120px;height:120px;border-radius:999px;margin:12px auto;display:grid;place-items:center;background:radial-gradient(60% 60% at 50% 30%,rgba(14,165,233,.25),transparent),linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));box-shadow:inset 0 0 0 2px rgba(14,165,233,.35),0 10px 30px rgba(14,165,233,.25);border:0;font-size:34px}
-.mic.live{box-shadow:inset 0 0 0 3px rgba(34,197,94,.6),0 10px 30px rgba(34,197,94,.35)}
-.status{display:flex;gap:8px;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--bad)} .dot.ok{background:var(--good)}
-.section{margin-top:12px}
-.tile{background:rgba(2,6,23,.5);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.tile h3{margin:0 0 6px;font-size:12px;color:var(--muted)} .tile p{margin:0;font-size:18px}
-.switch{display:flex;align-items:center;gap:10px}
-.switch input{width:auto}
-.log{height:180px;overflow:auto;background:rgba(2,6,23,.5);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px;font-size:13px}
-.log p{margin:6px 0}
-small.note{color:var(--muted)}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e5e7eb}
+  .wrap{max-width:650px;margin:0 auto;padding:18px}
+  .card{background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px}
+  h1{margin:0 0 6px;font-size:20px}
+  .muted{color:#94a3b8;font-size:13px;margin:0 0 12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 10px;font-size:12px;color:#94a3b8}
+  .mic{display:block;width:120px;height:120px;margin:12px auto;border-radius:50%;border:none;
+       background:radial-gradient(60% 60% at 50% 30%,rgba(14,165,233,.25),transparent);
+       box-shadow:inset 0 0 0 2px rgba(14,165,233,.35),0 10px 30px rgba(14,165,233,.25);
+       font-size:34px;color:#fff}
+  .mic.live{box-shadow:inset 0 0 0 3px rgba(34,197,94,.6),0 10px 30px rgba(34,197,94,.35)}
+  .status{display:flex;gap:8px;justify-content:center;color:#94a3b8;font-size:13px}
+  .dot{width:10px;height:10px;border-radius:50%;background:#ef4444}.dot.ok{background:#22c55e}
+  .btn{border:1px solid rgba(255,255,255,.2);background:#0b1220;color:#e5e7eb;border-radius:10px;padding:10px 12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .log{height:220px;overflow:auto;background:#0b1220;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px}
+  .log p{margin:6px 0;font-size:13px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🤖 Astra — Pro Voice Assistant</h1>
-    <p class="sub">Mobile web app. Wake word <b>“Astra”</b> or Always-on. Speaks, shows live dashboard, manual controls, and daily report. (Offline simulator built-in.)</p>
+    <h1>🤖 Astra — Emergency Stable Build</h1>
+    <p class="muted">Always-on, speaks back, light/fan control, time/temp/humidity/people, report. Mic is muted during speech, so no feedback loop.</p>
 
     <div class="row">
-      <span class="badge">Wake: <b>Astra</b></span>
-      <span class="badge">Mode:
-        <select id="always" class="input" style="width:auto;display:inline-block">
-          <option value="0" selected>Wake word</option>
-          <option value="1">Always-on</option>
-        </select>
-      </span>
-      <span class="badge">Simulator:
-        <select id="sim" class="input" style="width:auto;display:inline-block">
-          <option value="1" selected>On</option>
-          <option value="0">Off</option>
-        </select>
-      </span>
-      <span class="badge">TTS rate:
-        <select id="rate" class="input" style="width:auto;display:inline-block">
-          <option>170</option><option selected>185</option><option>200</option>
-        </select>
-      </span>
+      <span class="pill">Mode: <b>Always-on</b></span>
+      <span class="pill">Lang: <b>en-IN</b></span>
+      <span class="pill">Simulator: <b>ON</b></span>
     </div>
 
     <button id="micBtn" class="mic" title="Start/Stop">🎤</button>
     <div class="status"><span id="dot" class="dot"></span><span id="status">Idle</span></div>
 
-    <div class="section kpis">
-      <div class="tile"><h3>Light</h3><p id="kLight">OFF</p></div>
-      <div class="tile"><h3>Fan</h3><p id="kFan">OFF</p></div>
-      <div class="tile"><h3>People</h3><p id="kPeople">1</p></div>
-      <div class="tile"><h3>Temp (°C)</h3><p id="kTemp">27.0</p></div>
-      <div class="tile"><h3>Humidity (%)</h3><p id="kHum">48.0</p></div>
-      <div class="tile"><h3>Commands</h3><p id="kCmds">0</p></div>
-    </div>
-
-    <div class="section grid">
-      <label class="tile switch">
-        <h3 style="min-width:60px;margin:0">Light</h3>
-        <input id="swLight" type="checkbox"/><span>Toggle</span>
-      </label>
-      <label class="tile switch">
-        <h3 style="min-width:60px;margin:0">Fan</h3>
-        <input id="swFan" type="checkbox"/><span>Toggle</span>
-      </label>
-    </div>
-
-    <div class="section grid">
-      <button class="btn accent" id="btnReport">Speak Daily Report</button>
+    <div class="grid" style="margin-top:12px">
+      <button class="btn" id="btnLightOn">Light ON</button>
+      <button class="btn" id="btnLightOff">Light OFF</button>
+      <button class="btn" id="btnFanOn">Fan ON</button>
+      <button class="btn" id="btnFanOff">Fan OFF</button>
+      <button class="btn" id="btnReport">Speak Report</button>
       <button class="btn" id="btnReset">Reset Counters</button>
     </div>
 
-    <div class="section log" id="log" aria-live="polite"></div>
-    <p class="sub"><small class="note">Try: “Astra hello”, “Astra what’s the time”, “Astra temperature / humidity / people”, “Astra turn on/off light / fan”, “Astra report”, “Astra stop”.</small></p>
+    <div id="log" class="log" aria-live="polite"></div>
+    <p class="muted">Say: “turn the light on”, “turn off the fan”, “what’s the time”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
   </div>
 </div>
+
 <script>
-/* ===== ASTRA — Always-on, TTS-mute (no feedback loop), robust intents ===== */
-const LIGHT_WATTS = 12, FAN_WATTS = 75, INR_PER_KWH = 8;
-
-let listening=false, rec=null, lastProcessed="", ttsActive=false;
+/* === ESB CORE === */
+let listening=false, rec=null, ttsActive=false, lastProcessed="";
+const logBox=document.getElementById('log'), dot=document.getElementById('dot'), statusEl=document.getElementById('status'), micBtn=document.getElementById('micBtn');
+const counters={cmds:0, light_on_events:0, fan_on_events:0, light_ms:0, fan_ms:0, people_entries:0};
 let cache={light:0, fan:0, temp:27.0, hum:48.0, people:1};
-let counters={cmds:0, light_on_events:0, fan_on_events:0, light_ms:0, fan_ms:0, people_entries:0};
 let _lightOnAt=null, _fanOnAt=null;
-
-const el=id=>document.getElementById(id);
-const logBox=el('log'), dot=el('dot'), statusEl=el('status');
-const kLight=el('kLight'), kFan=el('kFan'), kTemp=el('kTemp'), kHum=el('kHum'), kPeople=el('kPeople'), kCmds=el('kCmds');
-const swLight=el('swLight'), swFan=el('swFan'), rateSel=el('rate'), micBtn=el('micBtn');
+const LIGHT_WATTS=12, FAN_WATTS=75, INR_PER_KWH=8;
 
 function log(t){const p=document.createElement('p');p.textContent=t;logBox.appendChild(p);logBox.scrollTop=logBox.scrollHeight;}
 function setStatus(t,ok){statusEl.textContent=t;dot.classList.toggle('ok',!!ok);}
-function refreshTiles(){ kLight.textContent=cache.light?"ON":"OFF"; kFan.textContent=cache.fan?"ON":"OFF";
-  kTemp.textContent=cache.temp.toFixed(1); kHum.textContent=cache.hum.toFixed(1); kPeople.textContent=cache.people;
-  kCmds.textContent=counters.cmds; if(swLight) swLight.checked=!!cache.light; if(swFan) swFan.checked=!!cache.fan; }
 
-// ---- Speak (MUTES mic during TTS so Astra doesn't hear itself)
 function speak(text){
   try{
-    // stop recognizer while speaking
-    ttsActive = true;
-    try{ rec && rec.stop(); }catch{}
+    ttsActive=true; try{ rec && rec.stop(); }catch{}
     const u=new SpeechSynthesisUtterance(text);
-    u.lang='en-IN'; u.rate=parseInt(rateSel.value,10)/185; u.pitch=1;
-    u.onend=()=>{ ttsActive=false; // small delay before resuming mic
-      setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 180);
-    };
+    u.lang='en-IN'; u.rate=1.0; u.pitch=1;
+    u.onend=()=>{ ttsActive=false; setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 180); };
     speechSynthesis.cancel(); speechSynthesis.speak(u);
     log("Astra: "+text);
-  }catch(e){console.warn("TTS error",e)}
+  }catch(e){log("TTS error: "+e);}
 }
 
-// ---- Simulator to keep dashboard alive
+/* Simulator keeps values changing */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
   cache.hum =Math.max(30,Math.min(70,cache.hum +(Math.random()*0.8-0.4)));
-  if(Math.random()<0.25){ const before=cache.people; cache.people=Math.max(0, before+(Math.random()<0.5?-1:1));
-    if(cache.people>before) counters.people_entries += (cache.people-before); }
-  refreshTiles();
+  if(Math.random()<0.25){ const before=cache.people; cache.people=Math.max(0,before+(Math.random()<0.5?-1:1)); if(cache.people>before) counters.people_entries+=(cache.people-before); }
 },1200);
 
-// Energy helpers
+/* Energy helpers */
 const nowMs=()=>performance.now();
 const kwh=(ms,w)=>(ms/3600000)*(w/1000);
-function finishRun(what){ const t=nowMs(); if(what==='light'&&_lightOnAt!=null){ counters.light_ms+=t-_lightOnAt; _lightOnAt=null; }
-                         if(what==='fan'  &&_fanOnAt  !=null){ counters.fan_ms  +=t-_fanOnAt;   _fanOnAt  =null; } }
-function startRun(what){ const t=nowMs(); if(what==='light'&&_lightOnAt==null) _lightOnAt=t; if(what==='fan'&&_fanOnAt==null) _fanOnAt=t; }
+function startRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt==null)_lightOnAt=t; if(what==='fan'&&_fanOnAt==null)_fanOnAt=t;}
+function finishRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt!=null){counters.light_ms+=t-_lightOnAt; _lightOnAt=null;} if(what==='fan'&&_fanOnAt!=null){counters.fan_ms+=t-_fanOnAt; _fanOnAt=null;} }
 const fmtMs=ms=>{const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000); return (h?`${h}h `:"")+`${m}m`;};
-function usageSummary(){ const t=nowMs();
-  const lightMs=counters.light_ms+(_lightOnAt? t-_lightOnAt:0);
-  const fanMs  =counters.fan_ms  +(_fanOnAt?   t-_fanOnAt  :0);
-  const lk=kwh(lightMs,LIGHT_WATTS), fk=kwh(fanMs,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH;
-  return {lightMs,fanMs,lk,fk,tk,cost};
-}
+function usage(){const t=nowMs(); const lms=counters.light_ms+(_lightOnAt? t-_lightOnAt:0); const fms=counters.fan_ms+(_fanOnAt? t-_fanOnAt:0);
+  const lk=kwh(lms,LIGHT_WATTS), fk=kwh(fms,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH; return {lms,fms,lk,fk,tk,cost};}
 
-// ---- Intent (always-on). Filters one-word noise; accepts natural phrasings.
+/* INTENT — Always-on, robust */
 function intent(text){
   let s=(text||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
   if(!s) return {type:"idle"};
-  const words=s.split(" ");
   const has=w=>s.includes(w); const any=(...a)=>a.some(w=>has(w));
+  // ignore single-noise words
+  if(s.split(" ").length===1 && !any("time","temp","light","fan","report","energy","humidity","people")) return {type:"idle"};
 
-  // ignore single-word noise like "ok", "hmm"
-  if(words.length===1 && !any("time","temp","light","fan","report","energy","humidity","people"))
-    return {type:"idle"};
-
-  // greetings/basic
   if(any("hello","hi","hey","good morning","good afternoon","good evening")) return {type:"greet"};
   if(has("how are you")) return {type:"how"};
   if(any("what is the time","what's the time","whats the time","time now","tell time","time")) return {type:"time"};
 
-  // sensors
   if(any("temperature","temp","how hot")) return {type:"temp"};
   if(any("humidity","how humid")) return {type:"hum"};
   if(any("how many people","people inside","people count","people")) return {type:"people"};
 
-  // device control — both word orders
-  if( (has("light")&&has("on")) || any("turn on light","switch on light","light on","turn the light on") ) { if(!has("off")) return {type:"light",val:1}; }
+  if( (has("light")&&has("on")) || any("turn on light","switch on light","light on","turn the light on") ){ if(!has("off")) return {type:"light",val:1}; }
   if( (has("light")&&has("off"))|| any("turn off light","switch off light","light off","turn the light off") ) return {type:"light",val:0};
-  if( (has("fan")&&has("on"))   || any("turn on fan","switch on fan","fan on","turn the fan on") ) { if(!has("off")) return {type:"fan",val:1}; }
+  if( (has("fan")&&has("on"))   || any("turn on fan","switch on fan","fan on","turn the fan on") ){ if(!has("off")) return {type:"fan",val:1}; }
   if( (has("fan")&&has("off"))  || any("turn off fan","switch off fan","fan off","turn the fan off") ) return {type:"fan",val:0};
 
-  // reports / usage
   if(any("report","summary","status")) return {type:"report"};
   if(any("fan usage","fan count","how many times fan")) return {type:"fan_count"};
   if(any("light usage","light count","how many times light")) return {type:"light_count"};
   if(any("energy","power","consumption","units")) return {type:"energy"};
 
   if(any("stop","exit","quit")) return {type:"stop"};
-
-  // fallback — speak something back (short acknowledgement + echo)
   return {type:"chat", raw:s};
 }
 
-// ---- Actions
+/* Actions */
 function setDevice(dev,val){
   if(dev==='light'){ if(val && !cache.light){ counters.light_on_events++; startRun('light'); }
                      if(!val && cache.light){ finishRun('light'); } }
   if(dev==='fan'){   if(val && !cache.fan){   counters.fan_on_events++;   startRun('fan'); }
                      if(!val && cache.fan){   finishRun('fan'); } }
-  cache[dev]=val?1:0; refreshTiles();
+  cache[dev]=val?1:0;
   speak(val?`Turning on the ${dev}.`:`Turning the ${dev} off.`);
 }
-function makeReport(){
-  const u=usageSummary();
+function report(){
+  const u=usage();
   return [
     `Commands today: ${counters.cmds}.`,
-    `Light is ${cache.light?'on':'off'} (${counters.light_on_events} times, ${fmtMs(u.lightMs)} total).`,
-    `Fan is ${cache.fan?'on':'off'} (${counters.fan_on_events} times, ${fmtMs(u.fanMs)} total).`,
-    `People count ${cache.people} (entries +${counters.people_entries}).`,
+    `Light ${cache.light?'on':'off'} (${counters.light_on_events} times, ${fmtMs(u.lms)}).`,
+    `Fan ${cache.fan?'on':'off'} (${counters.fan_on_events} times, ${fmtMs(u.fms)}).`,
+    `People ${cache.people} (entries +${counters.people_entries}).`,
     `Temperature ${cache.temp.toFixed(1)}°C, humidity ${cache.hum.toFixed(1)}%.`,
     `Energy ~ ${u.tk.toFixed(3)} kWh (₹${u.cost.toFixed(2)}).`
   ].join(" ");
@@ -211,33 +146,33 @@ function makeReport(){
 function handleIntent(res){
   switch(res.type){
     case "idle": return;
-    case "greet":{ const h=new Date().getHours(); const g=h<12?"Good morning":h<18?"Good afternoon":"Good evening"; return speak(`${g}, Achal. How can I help?`); }
+    case "greet":{const h=new Date().getHours(); const g=h<12?"Good morning":h<18?"Good afternoon":"Good evening"; return speak(`${g}, Achal.`);}
     case "how": return speak("All systems ready.");
     case "time": return speak("It's "+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     case "temp": return speak(`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`);
     case "hum":  return speak(`Humidity is ${cache.hum.toFixed(1)} percent.`);
     case "people": return speak(`People in room: ${cache.people}.`);
-    case "light": counters.cmds++; return setDevice("light", res.val);
-    case "fan":   counters.cmds++; return setDevice("fan",   res.val);
-    case "report": return speak(makeReport());
+    case "light": counters.cmds++; return setDevice("light",res.val);
+    case "fan":   counters.cmds++; return setDevice("fan",res.val);
+    case "report": return speak(report());
     case "fan_count": return speak(`The fan ran ${counters.fan_on_events} times.`);
     case "light_count": return speak(`The light ran ${counters.light_on_events} times.`);
-    case "energy": { const u=usageSummary(); return speak(`Energy so far is ${u.tk.toFixed(3)} kilowatt hours, about rupees ${u.cost.toFixed(2)}.`); }
+    case "energy": {const u=usage(); return speak(`Energy so far is ${u.tk.toFixed(3)} kilowatt hours, about rupees ${u.cost.toFixed(2)}.`);}
     case "stop": stopListening(); return speak("Stopping now. Bye!");
     case "chat": return speak(["Okay.","Noted.","I hear you.","Sure."][Math.floor(Math.random()*4)]+" "+res.raw);
   }
 }
 
-// ---- STT with TTS guard (don’t process while speaking) ----
+/* STT (Always-on) with TTS guard */
 function getRecognizer(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert("SpeechRecognition not supported. Use Chrome on Android with HTTPS."); return null; }
+  if(!SR){ alert("Your browser doesn't support SpeechRecognition. Use Chrome on Android with HTTPS."); return null; }
   const r=new SR(); r.lang='en-IN'; r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
   r.onend=()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
   r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
   r.onresult=e=>{
-    if(ttsActive) return; // ignore anything captured while speaking
+    if(ttsActive) return;
     const t=e.results[e.resultIndex][0].transcript.trim();
     if(!t || t===lastProcessed) return;
     lastProcessed=t; log("You: "+t);
@@ -248,21 +183,21 @@ function getRecognizer(){
 function startListening(){ if(listening) return; const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); try{ rec.start(); }catch{} }
 function stopListening(){ listening=false; try{ rec&&rec.stop(); }catch{} }
 
-if(swLight) swLight.addEventListener('change', e=> handleIntent({type:"light", val:e.target.checked?1:0}));
-if(swFan)   swFan  .addEventListener('change', e=> handleIntent({type:"fan",   val:e.target.checked?1:0}));
-document.getElementById('btnReport').addEventListener('click', ()=> speak(makeReport()));
-document.getElementById('btnReset').addEventListener('click', ()=>{ finishRun('light'); finishRun('fan');
-  counters={cmds:0, light_on_events:0, fan_on_events:0, light_ms:0, fan_ms:0, people_entries:0};
-  speak("Counters reset."); refreshTiles(); });
+/* Buttons */
+document.getElementById('btnLightOn').onclick=()=>handleIntent({type:"light",val:1});
+document.getElementById('btnLightOff').onclick=()=>handleIntent({type:"light",val:0});
+document.getElementById('btnFanOn').onclick=()=>handleIntent({type:"fan",val:1});
+document.getElementById('btnFanOff').onclick=()=>handleIntent({type:"fan",val:0});
+document.getElementById('btnReport').onclick=()=>handleIntent({type:"report"});
+document.getElementById('btnReset').onclick=()=>{ finishRun('light'); finishRun('fan');
+  counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0;
+  speak("Counters reset."); };
 
+/* Mic button */
 micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
 
-// First paint
-setTimeout(()=> speak('Hi Achal, Astra is ready. Tap the mic and just speak your command.'),300);
-refreshTiles();
+/* Ready message */
+setTimeout(()=>speak('Astra is ready. Tap the mic and speak your command.'),300);
 </script>
 </body>
 </html>
-
-
-
