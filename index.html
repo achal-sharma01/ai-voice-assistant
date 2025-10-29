@@ -128,17 +128,22 @@ function refreshTiles(){
   swLight.checked = !!cache.light; swFan.checked = !!cache.fan;
 }
 
-// ---- Beep on wake
+// ---- Beep on wake (throttled + only when phrase actually starts with "astra")
+let lastWakeBeepAt = 0;
 function beep(freq=980, ms=120){
   try{
-    const ctx=new (window.AudioContext||window.webkitAudioContext)();
-    const o=ctx.createOscillator(), g=ctx.createGain();
+    const now = Date.now();
+    if (now - lastWakeBeepAt < 1200) return; // throttle
+    lastWakeBeepAt = now;
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
     o.type='sine'; o.frequency.value=freq; o.connect(g); g.connect(ctx.destination);
     g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime+0.02);
     o.start();
     setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.03); o.stop(); ctx.close(); }, ms);
   }catch{}
+}
 }
 
 // ---- TTS
@@ -179,29 +184,81 @@ function _startRun(which){
   if(which==='fan'   && _fanOnAt==null)   _fanOnAt   = now;
 }
 function _kwh(ms, watts){ return (ms/3600000) * (watts/1000); }
-
-// ---- Intent with WAKE WINDOW (say “Astra”, then the command within 6s)
+// ---- Intent with WAKE WINDOW + robust phrase matching
 function intent(text){
-  const t=text.toLowerCase().trim();
-  const now = Date.now();
-  let s=t;
+  // normalize
+  let t = (text || "").toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")  // drop punctuation
+    .replace(/\s+/g, " ")               // collapse spaces
+    .trim();
 
+  const now = Date.now();
+  let s = t;
+
+  // Wake logic: "Astra" opens a 6s window; next sentence is accepted
   if (always.value !== "1") {
-    if (t.includes(WAKE)) {
-      wakeWindowUntil = now + 6000;             // 6 seconds to speak the command
-      s = t.split(WAKE).slice(1).join(" ").trim();
-      beep(); setStatus("Wake detected — awaiting command…", true);
-      if (!s) { speak("Yes, Achal?"); return {type:"idle"}; } // only said “Astra”
+    if (t.startsWith(WAKE+" ") || t === WAKE) {
+      wakeWindowUntil = now + 6000;
+      // remove wake word if command is in same sentence
+      s = t === WAKE ? "" : t.slice(WAKE.length).trim();
+      beep();
+      setStatus("Wake detected — awaiting command…", true);
+      if (!s) { speak("Yes, Achal?"); return { type: "idle" }; } // user only said "Astra"
     } else if (now < wakeWindowUntil) {
-      s = t; // accept plain command within window
+      s = t; // accept follow-up command inside window
     } else {
-      return { type:"idle" };
+      return { type: "idle" }; // ignore if no wake and window closed
     }
   }
 
-  if(/(hello|hi|hey|good (morning|afternoon|evening))/.test(s)) return {type:"greet"};
-  if(/how are you/.test(s)) return {type:"how"};
-  if(/(what'?s|tell) (the )?time|time now/.test(s)) return {type:"time"};
+  // Quick helpers
+  const has = (w) => s.includes(w);
+  const any = (...arr) => arr.some(w => has(w));
+
+  // Greetings / basics
+  if (any("hello","hi","hey","good morning","good afternoon","good evening")) return {type:"greet"};
+  if (has("how are you")) return {type:"how"};
+  if (any("what is the time","what's the time","whats the time","time now","tell time","time")) return {type:"time"};
+
+  // Sensors
+  if (any("temperature","temp","how hot")) return {type:"temp"};
+  if (any("humidity","how humid")) return {type:"hum"};
+  if (any("how many people","people inside","people count","people")) return {type:"people"};
+
+  // ===== Device control: accept BOTH word orders =====
+  // LIGHT ON: "turn on the light", "turn the light on", "light on", "switch on light"
+  if ( (has("light") && has("on")) || any("turn on light","switch on light","light on") ) {
+    // but make sure it's not "off"
+    if (!has("off")) return {type:"light", val:1};
+  }
+  // LIGHT OFF
+  if ( (has("light") && has("off")) || any("turn off light","switch off light","light off") ) {
+    return {type:"light", val:0};
+  }
+  // FAN ON
+  if ( (has("fan") && has("on")) || any("turn on fan","switch on fan","fan on") ) {
+    if (!has("off")) return {type:"fan", val:1};
+  }
+  // FAN OFF
+  if ( (has("fan") && has("off")) || any("turn off fan","switch off fan","fan off") ) {
+    return {type:"fan", val:0};
+  }
+
+  // Usage / energy / report
+  if (any("report","summary","status")) return {type:"report"};
+  if (any("fan usage","fan count","how many times fan")) return {type:"fan_count"};
+  if (any("light usage","light count","how many times light")) return {type:"light_count"};
+  if (any("energy","power","consumption","units")) return {type:"energy"};
+
+  if (any("stop","exit","quit")) return {type:"stop"};
+
+  // Fallback small talk
+  return {type:"chat", raw:s};
+}
+
+
+
+  
 
   // sensors
   if(/(what('?s)? )?(the )?temp(erature)?|how hot/.test(s)) return {type:"temp"};
@@ -332,4 +389,5 @@ refreshTiles();
 </script>
 </body>
 </html>
+
 
