@@ -90,13 +90,27 @@ small.note{color:var(--muted)}
     <p class="sub"><small class="note">Try: “Astra hello”, “Astra what’s the time”, “Astra temperature / humidity / people”, “Astra turn on/off light / fan”, “Astra report”, “Astra stop”.</small></p>
   </div>
 </div>
-
 <script>
-const WAKE="astra";
+/* ===== ASTRA PRO (wake window + usage & energy report) ===== */
+const WAKE = "astra";
+const LIGHT_WATTS = 12;    // change if your bulb is different
+const FAN_WATTS   = 75;    // typical ceiling fan
+const INR_PER_KWH = 8;     // rough electricity rate for estimate
+
 let listening=false, rec=null, lastHeard="";
 let cache={light:0, fan:0, temp:27.0, hum:48.0, people:1};
-let counters={cmds:0};
+let counters={
+  cmds:0,
+  light_on_events:0,
+  fan_on_events:0,
+  light_ms:0,
+  fan_ms:0,
+  people_entries:0
+};
+let _lightOnAt=null, _fanOnAt=null, _lastPeople=cache.people;
+let wakeWindowUntil = 0;   // 6s after saying “Astra”
 
+// ---- UI refs
 const el=(id)=>document.getElementById(id);
 const logBox=el('log'), dot=el('dot'), statusEl=el('status');
 const kLight=el('kLight'), kFan=el('kFan'), kTemp=el('kTemp'), kHum=el('kHum'), kPeople=el('kPeople'), kCmds=el('kCmds');
@@ -111,63 +125,152 @@ function refreshTiles(){
   kHum.textContent   = cache.hum.toFixed(1);
   kPeople.textContent= cache.people;
   kCmds.textContent  = counters.cmds;
-  swLight.checked = !!cache.light;
-  swFan.checked   = !!cache.fan;
+  swLight.checked = !!cache.light; swFan.checked = !!cache.fan;
 }
 
+// ---- Beep on wake
+function beep(freq=980, ms=120){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type='sine'; o.frequency.value=freq; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime+0.02);
+    o.start();
+    setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.03); o.stop(); ctx.close(); }, ms);
+  }catch{}
+}
+
+// ---- TTS
 function speak(text){
   try{
     const u=new SpeechSynthesisUtterance(text);
+    u.lang = 'en-IN';                                 // better for your accent
     u.rate = parseInt(rateSel.value,10)/185; u.pitch=1;
     speechSynthesis.cancel(); speechSynthesis.speak(u);
     log("Astra: "+text);
   }catch(e){console.warn("TTS error",e)}
 }
 
+// ---- Simulator (keeps dashboard alive)
 function simulateSensors(){
   if(sim.value!=="1") return;
   cache.temp = Math.max(20, Math.min(35, cache.temp + (Math.random()*0.4-0.2)));
   cache.hum  = Math.max(30, Math.min(70, cache.hum  + (Math.random()*0.8-0.4)));
-  if(Math.random()<0.25){ cache.people = Math.max(0, cache.people + (Math.random()<0.5?-1:1)); }
+  if(Math.random()<0.25){ 
+    const before = cache.people;
+    cache.people = Math.max(0, cache.people + (Math.random()<0.5?-1:1));
+    if (cache.people > before) counters.people_entries += (cache.people - before);
+  }
   refreshTiles();
 }
 setInterval(simulateSensors, 1200);
 
+// ---- Energy helpers
+function _now(){return performance.now();}
+function _finishRun(which){
+  const now=_now();
+  if(which==='light' && _lightOnAt!=null){ counters.light_ms += now - _lightOnAt; _lightOnAt=null; }
+  if(which==='fan'   && _fanOnAt!=null){   counters.fan_ms   += now - _fanOnAt;   _fanOnAt=null; }
+}
+function _startRun(which){
+  const now=_now();
+  if(which==='light' && _lightOnAt==null) _lightOnAt = now;
+  if(which==='fan'   && _fanOnAt==null)   _fanOnAt   = now;
+}
+function _kwh(ms, watts){ return (ms/3600000) * (watts/1000); }
+
+// ---- Intent with WAKE WINDOW (say “Astra”, then the command within 6s)
 function intent(text){
   const t=text.toLowerCase().trim();
+  const now = Date.now();
   let s=t;
-  if (always.value!=="1"){
-    if(!t.includes(WAKE)) return {type:"idle"};
-    s=t.split(WAKE).slice(1).join(" ").trim();
-    if(!s) return {type:"idle"};
+
+  if (always.value !== "1") {
+    if (t.includes(WAKE)) {
+      wakeWindowUntil = now + 6000;             // 6 seconds to speak the command
+      s = t.split(WAKE).slice(1).join(" ").trim();
+      beep(); setStatus("Wake detected — awaiting command…", true);
+      if (!s) { speak("Yes, Achal?"); return {type:"idle"}; } // only said “Astra”
+    } else if (now < wakeWindowUntil) {
+      s = t; // accept plain command within window
+    } else {
+      return { type:"idle" };
+    }
   }
+
   if(/(hello|hi|hey|good (morning|afternoon|evening))/.test(s)) return {type:"greet"};
   if(/how are you/.test(s)) return {type:"how"};
   if(/(what'?s|tell) (the )?time|time now/.test(s)) return {type:"time"};
-  if(/temperature|temp|how hot/.test(s)) return {type:"temp"};
+
+  // sensors
+  if(/(what('?s)? )?(the )?temp(erature)?|how hot/.test(s)) return {type:"temp"};
   if(/humidity|how humid/.test(s)) return {type:"hum"};
-  if(/people|count|person/.test(s)) return {type:"people"};
+  if(/how many (people|persons)|people (inside|count)|people/.test(s)) return {type:"people"};
+
+  // devices
   if(/(turn|switch) on (the )?light|light on/.test(s)) return {type:"light",val:1};
   if(/(turn|switch) off (the )?light|light off/.test(s)) return {type:"light",val:0};
   if(/(turn|switch) on (the )?fan|fan on/.test(s)) return {type:"fan",val:1};
   if(/(turn|switch) off (the )?fan|fan off/.test(s)) return {type:"fan",val:0};
+
+  // usage / energy questions
   if(/report|summary|status/.test(s)) return {type:"report"};
+  if(/how many times (did )?(the )?fan run/.test(s)) return {type:"fan_count"};
+  if(/how many times (did )?(the )?light run|light (usage|count)/.test(s)) return {type:"light_count"};
+  if(/energy|power|consumption|units/.test(s)) return {type:"energy"};
+
   if(/stop|exit|quit/.test(s)) return {type:"stop"};
   return {type:"chat", raw:s};
 }
 
+// ---- Actions
 function setDevice(dev,val){
+  // update counters + durations
+  if(dev==='light'){
+    if(val && !cache.light){ counters.light_on_events++; _startRun('light'); }
+    if(!val && cache.light){ _finishRun('light'); }
+  }
+  if(dev==='fan'){
+    if(val && !cache.fan){ counters.fan_on_events++; _startRun('fan'); }
+    if(!val && cache.fan){ _finishRun('fan'); }
+  }
+
   cache[dev]=val?1:0; refreshTiles();
   speak(val?`Turning on the ${dev}.`:`Turning the ${dev} off.`);
 }
-function makeReport(){
-  const parts=[];
-  parts.push(`Commands today: ${counters.cmds}.`);
-  parts.push(`Light is ${cache.light?'on':'off'}. Fan is ${cache.fan?'on':'off'}.`);
-  parts.push(`Temperature ${cache.temp.toFixed(1)} degrees Celsius, humidity ${cache.hum.toFixed(1)} percent.`);
-  parts.push(`People count ${cache.people}.`);
-  return parts.join(" ");
+
+function _usageSummary(){
+  // include current ongoing run time
+  const now=_now();
+  const lightMs = counters.light_ms + (_lightOnAt? (now - _lightOnAt) : 0);
+  const fanMs   = counters.fan_ms   + (_fanOnAt?   (now - _fanOnAt)   : 0);
+
+  const lightKwh = _kwh(lightMs, LIGHT_WATTS);
+  const fanKwh   = _kwh(fanMs,   FAN_WATTS);
+  const totalKwh = lightKwh + fanKwh;
+  const costINR  = totalKwh * INR_PER_KWH;
+
+  return {lightMs, fanMs, lightKwh, fanKwh, totalKwh, costINR};
 }
+
+function _fmtMs(ms){
+  const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);
+  return (h? h+"h ":"") + m + "m";
+}
+
+function makeReport(){
+  const u=_usageSummary();
+  return [
+    `Commands today: ${counters.cmds}.`,
+    `Light is ${cache.light?'on':'off'} (${counters.light_on_events} times, ${_fmtMs(u.lightMs)} total).`,
+    `Fan is ${cache.fan?'on':'off'} (${counters.fan_on_events} times, ${_fmtMs(u.fanMs)} total).`,
+    `People count ${cache.people} (entries +${counters.people_entries}).`,
+    `Temperature ${cache.temp.toFixed(1)}°C, humidity ${cache.hum.toFixed(1)}%.`,
+    `Energy used ~ ${u.totalKwh.toFixed(3)} kWh (₹${u.costINR.toFixed(2)}).`
+  ].join(" ");
+}
+
 function handleIntent(res){
   switch(res.type){
     case "idle": return;
@@ -184,18 +287,26 @@ function handleIntent(res){
     case "light": counters.cmds++; return setDevice("light",res.val);
     case "fan":   counters.cmds++; return setDevice("fan",res.val);
     case "report": return speak(makeReport());
+    case "fan_count": return speak(`The fan ran ${counters.fan_on_events} times.`);
+    case "light_count": return speak(`The light ran ${counters.light_on_events} times.`);
+    case "energy": {
+      const u=_usageSummary();
+      return speak(`Approximate energy so far is ${u.totalKwh.toFixed(3)} kilowatt hours, costing about rupees ${u.costINR.toFixed(2)}.`);
+    }
     case "stop": stopListening(); return speak("Stopping now. Bye!");
     case "chat": return speak(["Okay.","Noted.","I hear you.","Sure."][Math.floor(Math.random()*4)]+" "+res.raw);
   }
 }
 
+// ---- Speech Recognition (use en-IN; works best on Chrome Android/HTTPS)
 function getRecognizer(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ alert("SpeechRecognition not supported. Use Chrome on Android with HTTPS."); return null; }
   const r = new SR();
-  r.lang="en-US"; r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
+  r.lang="en-IN";
+  r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
-  r.onend=()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening) r.start(); };
+  r.onend  =()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening) r.start(); };
   r.onerror=(e)=>{ log("STT error: "+(e.error||"unknown")); };
   r.onresult=(e)=>{ const t=e.results[e.resultIndex][0].transcript; lastHeard=t; log("You: "+t); handleIntent(intent(t)); };
   return r;
@@ -203,14 +314,22 @@ function getRecognizer(){
 function startListening(){ if(listening) return; const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); rec.start(); }
 function stopListening(){ listening=false; try{ rec && rec.stop(); }catch{} }
 
+// ---- Events
 micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
 swLight.addEventListener('change', e=> handleIntent({type:"light", val: e.target.checked?1:0}));
-swFan.addEventListener('change', e=> handleIntent({type:"fan", val: e.target.checked?1:0}));
+swFan  .addEventListener('change', e=> handleIntent({type:"fan",   val: e.target.checked?1:0}));
 document.getElementById('btnReport').addEventListener('click', ()=> speak(makeReport()));
-document.getElementById('btnReset').addEventListener('click', ()=>{ counters={cmds:0}; speak("Counters reset."); refreshTiles(); });
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  // finalize any running sessions before reset
+  _finishRun('light'); _finishRun('fan');
+  counters={cmds:0, light_on_events:0, fan_on_events:0, light_ms:0, fan_ms:0, people_entries:0};
+  speak("Counters reset."); refreshTiles();
+});
 
-setTimeout(()=> speak('Hi Achal, Astra is ready. Tap the mic and say "Astra".'),300);
+// ---- Hello + first paint
+setTimeout(()=> speak('Hi Achal, Astra is ready. Tap the mic and say "Astra", then your command.'),300);
 refreshTiles();
 </script>
 </body>
 </html>
+
