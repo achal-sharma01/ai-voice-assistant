@@ -73,10 +73,8 @@
     <p class="muted">Say: “turn the light on”, “turn off the fan”, “what’s the time”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
   </div>
 </div>
-  <script>
-/* === ASTRA — Human-like assistant (full conversational, stable) === */
-/* Features: continuous listening, natural female voice, thinking pause,
-   small talk, jokes, quick math, warm phrasing, manual controls, dashboard */
+<script>
+/* === ASTRA — Single, stable mic + safe TTS (clean build) === */
 
 let listening=false, rec=null, ttsActive=false, lastProcessed="";
 const logBox=document.getElementById('log'), dot=document.getElementById('dot'),
@@ -106,87 +104,61 @@ function refreshTiles(){
 function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
 function log(t){ const p=document.createElement('p'); p.textContent=t; logBox.appendChild(p); logBox.scrollTop=logBox.scrollHeight; }
 
-/* ---------- Voice: HARD LOCK to a clear English voice ---------- */
-let preferredVoice = null;
-
-// Try strictly for "Google US English" first; if missing, use any English voice.
-// We will ALWAYS speak with en-US language to avoid weird pronunciations.
-function lockVoice() {
-  const voices = speechSynthesis.getVoices() || [];
-  // strict first choice
-  let v = voices.find(v => v.name === "Google US English");
-  // fallback: any Google English
-  if (!v) v = voices.find(v => /Google/i.test(v.name) && /en/i.test(v.lang));
-  // fallback: any English
-  if (!v) v = voices.find(v => /en/i.test(v.lang));
-  preferredVoice = v || null;
+/* ---------- Voice lock (clear English) ---------- */
+let preferredVoice=null;
+function lockVoice(){
+  const voices=speechSynthesis.getVoices()||[];
+  let v = voices.find(v=>v.name==="Google US English")
+       || voices.find(v=>/Google/i.test(v.name)&&/en/i.test(v.lang))
+       || voices.find(v=>/en/i.test(v.lang));
+  preferredVoice=v||null;
 }
-
-speechSynthesis.onvoiceschanged = () => { lockVoice(); };
-setTimeout(() => { try { lockVoice(); } catch {} }, 500); // fallback if event doesn’t fire
-
+speechSynthesis.onvoiceschanged=()=>lockVoice();
+setTimeout(()=>{ try{ lockVoice(); }catch{} }, 500);
 
 /* ---------- Humanize + tiny “thinking” pause ---------- */
 function humanize(text){
-  let s = (text||"")
+  let s=(text||"")
     .replace(/\bis not\b/gi,"isn't")
     .replace(/\bI am\b/gi,"I'm")
     .replace(/\bdo not\b/gi,"don't")
     .replace(/\bwe will\b/gi,"we'll");
-  s = s.replace(/, /g,", … ");
-  return s;
+  return s.replace(/, /g,", … ");
 }
-function thinkPause(){ return new Promise(res=>{ setStatus("Thinking…",false); setTimeout(res, 300+Math.random()*500); }); }
-// --- Safe TTS that releases audio before mic restarts ---
+const wait = ms => new Promise(r=>setTimeout(r,ms));
+
+/* ---------- Safe TTS: never collides with mic ---------- */
 async function speak(text){
-  if (!text) return;
-  try { speechSynthesis.cancel(); } catch {}
-
-  ttsActive = true;
+  if(!text) return;
+  try{ speechSynthesis.cancel(); }catch{}
+  ttsActive=true;
   setStatus("Thinking…", false);
-  log("Astra: " + text);
+  log("Astra: "+text);
 
-  // stop recognizer if it’s still running
-  try { rec && rec.stop(); } catch {}
+  // stop mic before speaking
+  try{ rec && rec.stop(); }catch{}
 
-  // small pause so Chrome releases the mic
-  await new Promise(r => setTimeout(r, 350));
+  // small pause so Chrome releases audio
+  await wait(350);
 
   const u = new SpeechSynthesisUtterance(humanize(text));
-  u.lang = 'en-IN';
-  u.rate = 0.97;
-  u.pitch = 1.05;
+  u.lang = 'en-US';                         // force stable language
+  if(preferredVoice){ try{ u.voice=preferredVoice; u.lang=preferredVoice.lang||'en-US'; }catch{} }
+  u.rate = 0.97; u.pitch = 1.05; u.volume = 1.0;
 
-  const voices = speechSynthesis.getVoices() || [];
-  const v = voices.find(v => /Google/i.test(v.name) && /English/i.test(v.lang))
-           || voices.find(v => /en/i.test(v.lang))
-           || null;
-  if (v) u.voice = v;
-
-  u.onstart = () => setStatus("Speaking…", false);
-  u.onend = () => {
-    ttsActive = false;
+  u.onstart=()=> setStatus("Speaking…", false);
+  u.onend=()=>{ 
+    ttsActive=false; 
     setStatus("Listening…", true);
-    // Wait a bit so Chrome frees the audio device before restarting recognition
-    setTimeout(()=>{
-      if (listening && rec) {
-        try { rec.start(); log("🎤 Mic restarted after speaking."); }
-        catch(e){ log("⚠️ Mic restart error: "+e.message); }
-      }
-    }, 900);
+    // restart mic after a short cool-down
+    setTimeout(()=>{ if(listening && rec){ try{ rec.start(); log("🎤 Mic restarted after speaking."); }catch(e){ log("⚠️ Mic restart error: "+e.message); } } }, 900);
   };
-  u.onerror = e => { ttsActive=false; log("TTS error: "+(e.error||'unknown')); };
+  u.onerror=e=>{ ttsActive=false; log("TTS error: "+(e.error||'unknown')); setStatus("Idle", false); };
 
-  try {
-    speechSynthesis.speak(u);
-  } catch(e){
-    log("Speak error: "+e.message);
-    ttsActive=false;
-  }
+  try{ speechSynthesis.speak(u); }catch(e){ log("Speak error: "+e.message); ttsActive=false; }
 }
 
-
-/* ---------- Simulator (keep tiles alive until hardware plugs in) ---------- */
+/* ---------- Simulator (until hardware plugs in) ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
   cache.hum =Math.max(30,Math.min(70,cache.hum +(Math.random()*0.8-0.4)));
@@ -206,9 +178,8 @@ const fmtMs=ms=>{const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000
 function usage(){ const t=nowMs(); const lms=counters.light_ms+(_lightOnAt? t-_lightOnAt:0); const fms=counters.fan_ms+(_fanOnAt? t-_fanOnAt:0);
   const lk=kwh(lms,LIGHT_WATTS), fk=kwh(fms,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH; return {lms,fms,lk,fk,tk,cost}; }
 
-/* ---------- Brain: memory + small talk + math + intents ---------- */
-const MEM=[]; // last few turns
-function remember(user, astra){ MEM.push({user,astra}); if(MEM.length>8) MEM.shift(); }
+/* ---------- Brain: small talk + intents ---------- */
+const MEM=[]; function remember(user,astra){ MEM.push({user,astra}); if(MEM.length>8) MEM.shift(); }
 const JOKES=[
  "Why did the computer get cold? It forgot to close its Windows.",
  "Why do programmers prefer dark mode? Because light attracts bugs.",
@@ -308,39 +279,52 @@ async function handleIntent(res, raw){
   }
 }
 
-/* ---------- STT (Always-on) with TTS guard + barge-in ---------- */
-function getRecognizer(){
+/* ---------- Single SpeechRecognition (no duplicates) ---------- */
+function setupMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert("Your browser doesn't support SpeechRecognition. Use Chrome on Android with HTTPS."); return null; }
-  const r=new SR(); r.lang='en-IN'; r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
-    // 🎧 Diagnostic hooks — helps confirm mic is working
-  r.onaudiostart = ()=> log("🎤 Mic: audio stream started (permission granted).");
-  r.onaudioend   = ()=> log("🎤 Mic: audio stream ended.");
-  r.onspeechstart= ()=> log("🗣️ Speech detected.");
-  r.onspeechend  = ()=> log("🗣️ Speech finished.");
-  r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
-  r.onend  =()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
-  r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
-  r.onresult = async e => {
-  // Barge-in: if user speaks while TTS, stop TTS and process the new input
-  if (ttsActive) {
-    try { speechSynthesis.cancel(); } catch {}
-    ttsActive = false;
-  }
+  if(!SR){ alert("Speech recognition not supported. Use Chrome on HTTPS."); return; }
+  rec=new SR();
+  rec.lang='en-IN'; rec.continuous=true; rec.interimResults=false; rec.maxAlternatives=1;
 
-  const t = e.results[e.resultIndex][0].transcript.trim();
-  if (!t || t === lastProcessed) return;
-
-  lastProcessed = t;
-  log("You: " + t);
-
-  const res = intent(t);
-  await handleIntent(res, t);
-};
-  return r;
+  rec.onstart=()=>{ log("🎤 Mic started."); setStatus("Listening…",true); micBtn.classList.add('live'); };
+  rec.onend=()=>{ log("🛑 Mic ended."); micBtn.classList.remove('live'); if(listening && !ttsActive){ setTimeout(()=>{ try{ rec.start(); }catch{} }, 600); } else { setStatus("Idle",false); } };
+  rec.onerror=e=>{ log("❌ STT error: "+(e.error||'unknown')); if(e.error==="not-allowed"||e.error==="service-not-allowed"){ setStatus("Mic permission blocked.", false);} };
+  rec.onresult=async e=>{
+    if(ttsActive) return; // guard while speaking
+    const t=e.results[e.resultIndex][0].transcript.trim();
+    if(!t || t===lastProcessed) return;
+    lastProcessed=t; log("You: "+t);
+    const res=intent(t);
+    await handleIntent(res, t);
+  };
 }
-function startListening(){ if(listening) return; initVoice(); const r=getRecognizer(); if(!r) return; rec=r; listening=true; try{ rec.start(); }catch{} }
-function stopListening(){ listening=false; try{ rec&&rec.stop(); }catch{} }
+
+function startMic(){
+  if(ttsActive) return;
+  if(!rec) setupMic();
+  if(!rec) return;
+  // Ensure permission; then start
+  const md = navigator.mediaDevices;
+  if(md && md.getUserMedia){
+    md.getUserMedia({audio:true}).then(stream=>{
+      stream.getTracks().forEach(t=>t.stop()); // we only needed permission
+      listening=true;
+      try{ rec.start(); }catch(e){ log("Start error: "+e.message); }
+    }).catch(err=>{
+      log("🚫 Mic permission denied: "+err.message);
+      setStatus("Mic permission denied", false);
+    });
+  } else {
+    listening=true;
+    try{ rec.start(); }catch(e){ log("Start error: "+e.message); }
+  }
+}
+function stopMic(){
+  listening=false;
+  try{ rec && rec.stop(); }catch{}
+  micBtn.classList.remove('live');
+  setStatus("Idle", false);
+}
 
 /* ---------- Manual buttons ---------- */
 document.getElementById('btnLightOn').onclick = ()=>handleIntent({type:"light",val:1}, "button: light on");
@@ -348,113 +332,24 @@ document.getElementById('btnLightOff').onclick= ()=>handleIntent({type:"light",v
 document.getElementById('btnFanOn').onclick   = ()=>handleIntent({type:"fan",val:1}, "button: fan on");
 document.getElementById('btnFanOff').onclick  = ()=>handleIntent({type:"fan",val:0}, "button: fan off");
 document.getElementById('btnReport').onclick  = ()=>handleIntent({type:"report"}, "button: report");
-const btnReset = document.getElementById('btnReset');
+const btnReset=document.getElementById('btnReset');
 if(btnReset){
   btnReset.onclick=()=>{ finishRun('light'); finishRun('fan'); counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0; refreshTiles(); speak("Done. I’ve reset the counters."); };
 }
-// ---------- Final, stable mic setup ----------
-let micReady = false;
 
-// Create recognizer only once
-function setupMic(){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    alert("Speech recognition not supported. Use Google Chrome with HTTPS.");
-    return;
-  }
-  rec = new SR();
-  rec.lang = 'en-IN';
-  rec.continuous = true;
-  rec.interimResults = false;
-  rec.maxAlternatives = 1;
+/* ---------- Single mic toggle handler ---------- */
+micBtn.addEventListener('click', ()=>{ if(!listening) startMic(); else stopMic(); });
 
-  rec.onstart = () => {
-    log("🎤 Mic started successfully.");
-    setStatus("Listening…", true);
-    micBtn.classList.add("live");
-    micReady = true;
-  };
-  rec.onend = () => {
-    log("🛑 Mic stopped or ended.");
-    micBtn.classList.remove("live");
-    setStatus("Idle", false);
-    if (listening && !ttsActive) {
-      setTimeout(() => {
-        try { rec.start(); } catch {}
-      }, 500);
-    }
-  };
-  rec.onerror = e => {
-    log("❌ Mic error: " + (e.error || "unknown"));
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-      setStatus("Mic permission blocked.", false);
-    }
-  };
-  rec.onresult = async e => {
-    if (ttsActive) return;
-    const t = e.results[e.resultIndex][0].transcript.trim();
-    if (!t || t === lastProcessed) return;
-    lastProcessed = t;
-    log("You: " + t);
-    const res = intent(t);
-    await handleIntent(res, t);
-  };
-}
-
-function startMic(){
-  if (ttsActive) return;
-  if (!rec) setupMic();
-  if (!rec) return;
-
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(() => {
-      log("🎤 Permission granted, starting...");
-      listening = true;
-      try {
-        rec.start();
-      } catch (e) {
-        log("⚠️ Start error: " + e.message);
-      }
-    })
-    .catch(err => {
-      log("🚫 Mic permission denied: " + err.message);
-      setStatus("Mic permission denied", false);
-    });
-}
-
-function stopMic(){
-  listening = false;
-  try { rec && rec.stop(); } catch {}
-  micBtn.classList.remove("live");
-  setStatus("Idle", false);
-  log("🛑 Mic manually stopped.");
-}
-
-// Button
-micBtn.addEventListener("click", ()=>{
-  if (!listening) startMic();
-  else stopMic();
-});
 /* ---------- First paint ---------- */
-    // ---------- Single mic toggle handler ----------
-micBtn.addEventListener('click', ()=>{
-  if (!listening) startListening();
-  else            stopListening();
-});
+setTimeout(()=>{ refreshTiles(); lockVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
 
-setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
-    // Keep TTS alive on some Android builds
-setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
-    // Initialize mic setup after page fully loads
-window.addEventListener("load", () => {
-  setupMic();
-  speak("Hi Achal, Astra is ready. Tap the mic and speak.");
-});
-
-
+// Initialize mic once page is loaded
+window.addEventListener('load', ()=>{ setupMic(); });
 </script>
+
 </body>
 </html>
+
 
 
 
