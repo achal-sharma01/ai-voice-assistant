@@ -292,19 +292,42 @@ function startListening(){ if(listening) return; initVoice(); const r=getRecogni
 function stopListening(){ listening=false; try{ rec&&rec.stop(); }catch{} }
 
 // Buttons
-document.getElementById('btnLightOn').onclick=()=>handleIntent({type:"light",val:1});
-document.getElementById('btnLightOff').onclick=()=>handleIntent({type:"light",val:0});
-document.getElementById('btnFanOn').onclick=()=>handleIntent({type:"fan",val:1});
-document.getElementById('btnFanOff').onclick=()=>handleIntent({type:"fan",val:0});
-document.getElementById('btnReport').onclick=()=>handleIntent({type:"report"});
+document.getElementById('btnLightOn').onclick = ()=>handleIntent({type:"light",val:1});
+document.getElementById('btnLightOff').onclick = ()=>handleIntent({type:"light",val:0});
+document.getElementById('btnFanOn').onclick = ()=>handleIntent({type:"fan",val:1});
+document.getElementById('btnFanOff').onclick = ()=>handleIntent({type:"fan",val:0});
+document.getElementById('btnReport').onclick = ()=>handleIntent({type:"report"});
+document.getElementById('btnReset').onclick = ()=>{
+  finishRun('light');
+  finishRun('fan');
+  counters.cmds = 0;
+  counters.light_on_events = 0;
+  counters.fan_on_events = 0;
+  counters.light_ms = 0;
+  counters.fan_ms = 0;
+  counters.people_entries = 0;
+  refreshTiles();
+  speak("All counters have been reset, Achal.");
+};
 
-micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
+// Mic toggle
+micBtn.addEventListener('click', ()=> listening ? stopListening() : startListening());
+
+// Wait for Chrome voices to fully load before greeting
+window.speechSynthesis.onvoiceschanged = () => {
+  initVoice();
+  setTimeout(()=>{
+    refreshTiles();
+    speak("Hi Achal, Astra is ready. Say 'turn on the light' or 'report'.");
+  }, 600);
+};
 
 // Startup
 setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, Astra is ready. Say 'turn on the light' or 'report'."); }, 350);
 </script>
 </body>
 </html>
+
 
 
 
