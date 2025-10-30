@@ -137,76 +137,61 @@ function humanize(text){
   return s;
 }
 function thinkPause(){ return new Promise(res=>{ setStatus("Thinking…",false); setTimeout(res, 300+Math.random()*500); }); }
-
-
 async function speak(text){
-  // Cancel anything pending and prime engine
+  // Single-shot, no duplicates, no watchdog
+  await thinkPause();
+
+  // Cancel any pending/queued utterances, then prime
   try { speechSynthesis.cancel(); } catch {}
   try { speechSynthesis.resume(); } catch {}
 
-  await thinkPause();
-
+  // Stop STT while we talk
   ttsActive = true;
   try { if (rec) rec.stop(); } catch {}
 
   const u = new SpeechSynthesisUtterance(humanize(text));
 
-  // ALWAYS use en-US so the engine doesn’t switch to Hindi or odd accents
+  // Hard-lock to English to avoid random language
   u.lang = 'en-US';
-  if (preferredVoice) {
-    try { u.voice = preferredVoice; } catch {}
-  }
+  if (preferredVoice) { try { u.voice = preferredVoice; } catch {} }
 
   // Warm tone
   u.rate = 0.97;
   u.pitch = 1.04;
   u.volume = 1.0;
 
-  let finished = false;
+  u.onstart = () => setStatus("Speaking…", false);
 
-  u.onstart = () => { setStatus("Speaking…", false); };
   u.onend = () => {
-    finished = true;
     ttsActive = false;
     setStatus("Listening…", true);
-    setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
+    // cooldown so STT doesn't collide
+    setTimeout(() => {
+      if (listening && rec) {
+        try { rec.start(); } catch (e) { log("STT restart error: " + e.message); }
+      }
+    }, 350);
   };
-  u.onerror = () => {
-    finished = true;
+
+  u.onerror = (e) => {
     ttsActive = false;
-    log("TTS error: couldn’t speak.");
+    log("TTS error: " + (e.error || 'unknown'));
     setStatus("Listening…", true);
     try { if (listening && rec) rec.start(); } catch {}
   };
 
   log("Astra: " + u.text);
 
-  // Speak after a tiny tick (Chrome quirk)
+  // Speak after a micro-tick (Chrome quirk)
   setTimeout(() => {
-    try { speechSynthesis.resume(); } catch {}
-    try { speechSynthesis.speak(u); } catch {}
-  }, 30);
-
-  // Safety watchdog: if nothing happened in 1s, try once more with no voice object
-  setTimeout(() => {
-    if (!finished) {
-      try { speechSynthesis.cancel(); } catch {}
-      const retry = new SpeechSynthesisUtterance(humanize(text));
-      retry.lang = 'en-US';
-      retry.rate = 0.97; retry.pitch = 1.04; retry.volume = 1.0;
-      retry.onend = () => {
-        ttsActive = false;
-        setStatus("Listening…", true);
-        setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
-      };
-      retry.onerror = () => {
-        ttsActive = false; setStatus("Listening…", true);
-        try { if (listening && rec) rec.start(); } catch {}
-      };
-      try { speechSynthesis.speak(retry); } catch {}
+    try { speechSynthesis.speak(u); } catch (e) {
+      ttsActive = false;
+      setStatus("Listening…", true);
+      log("Speak error: " + e.message);
     }
-  }, 1000);
+  }, 20);
 }
+
 /* ---------- Simulator (keep tiles alive until hardware plugs in) ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
@@ -337,20 +322,22 @@ function getRecognizer(){
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
   r.onend  =()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
   r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
-    r.onresult = async e => {
-    // If Astra is speaking, ignore interim speech (prevents 'silent' bug)
-    if (ttsActive) return;
+  r.onresult = async e => {
+  // Barge-in: if user speaks while TTS, stop TTS and process the new input
+  if (ttsActive) {
+    try { speechSynthesis.cancel(); } catch {}
+    ttsActive = false;
+  }
 
-    const t = e.results[e.resultIndex][0].transcript.trim();
-    if (!t || t === lastProcessed) return;
+  const t = e.results[e.resultIndex][0].transcript.trim();
+  if (!t || t === lastProcessed) return;
 
-    lastProcessed = t;
-    log("You: " + t);
+  lastProcessed = t;
+  log("You: " + t);
 
-    const res = intent(t);
-    await handleIntent(res, t);
-  };
-
+  const res = intent(t);
+  await handleIntent(res, t);
+};
   return r;
 }
 function startListening(){ if(listening) return; initVoice(); const r=getRecognizer(); if(!r) return; rec=r; listening=true; try{ rec.start(); }catch{} }
@@ -367,8 +354,24 @@ if(btnReset){
   btnReset.onclick=()=>{ finishRun('light'); finishRun('fan'); counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0; refreshTiles(); speak("Done. I’ve reset the counters."); };
 }
 
-/* ---------- Mic toggle ---------- */
-micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
+// Mic toggle (rebuilds recognizer if needed)
+micBtn.addEventListener('click', () => {
+  if (!listening) {
+    initVoice();
+    rec = getRecognizer();               // always rebuild fresh
+    if (!rec) { setStatus("Mic not supported", false); return; }
+    listening = true;
+    setStatus("Listening…", true);
+    micBtn.classList.add('live');
+    try { rec.start(); } catch (e) { log("STT start error: " + e.message); }
+  } else {
+    listening = false;
+    micBtn.classList.remove('live');
+    setStatus("Idle", false);
+    try { rec && rec.stop(); } catch {}
+  }
+});
+
 
 /* ---------- First paint ---------- */
 setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
@@ -378,6 +381,7 @@ setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
 </script>
 </body>
 </html>
+
 
 
 
