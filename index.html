@@ -360,14 +360,35 @@ if(btnReset){
 }
 // ===== Robust mic toggle (works for tap/click on mobile) =====
 function startMic(){
-  log("⚙️ Mic: start requested");
+  log("🎤 Mic: start requested");
   initVoice();
-  rec = getRecognizer();               // always rebuild fresh
-  if (!rec) { setStatus("Mic not supported", false); return; }
-  listening = true;
-  setStatus("Listening…", true);
-  micBtn.classList.add('live');
-  try { rec.start(); } catch (e) { log("STT start error: " + e.message); }
+
+  // If already active, stop first to reset
+  try { if (rec) rec.stop(); } catch {}
+
+  rec = getRecognizer();
+  if (!rec) {
+    setStatus("Mic not supported", false);
+    return;
+  }
+
+  // Request permission explicitly (needed on Android Chrome)
+  try {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        log("🎤 Permission granted, starting STT...");
+        listening = true;
+        setStatus("Listening…", true);
+        micBtn.classList.add('live');
+        try { rec.start(); } catch (e) { log("STT start error: " + e.message); }
+      })
+      .catch(err => {
+        log("🚫 Mic permission denied: " + err.message);
+        setStatus("Mic permission denied", false);
+      });
+  } catch (err) {
+    log("⚠️ Mic init failed: " + err.message);
+  }
 }
 
 function stopMic(){
@@ -403,6 +424,7 @@ setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
 </script>
 </body>
 </html>
+
 
 
 
