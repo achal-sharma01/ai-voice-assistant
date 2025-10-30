@@ -140,6 +140,9 @@ function humanize(text){
     .replace(/\bwe will\b/gi, "we'll");
   // add small natural pauses
   s = s.replace(/, /g, ", … ");
+  if (!/[.!?]$/.test(s)) s += ".";
+s = s.charAt(0).toUpperCase() + s.slice(1);
+
   return s;
 }
 
@@ -171,11 +174,23 @@ async function speak(text){
 
   const sayChunk = (c) => new Promise(res=>{
     const u = new SpeechSynthesisUtterance(c);
-    const all = speechSynthesis.getVoices() || [];
-    // prefer your chosen voice, else nice Google female if present
-    const want = ["Google UK English Female","Google US English","Microsoft Zira Desktop - English (United States)"];
-    const best = all.find(v=> want.includes(v.name)) || preferredVoice || all[0];
-    if (best){ u.voice = best; u.lang = best.lang; }
+    // Auto-pick the best available realistic female voice
+const all = speechSynthesis.getVoices() || [];
+const want = [
+  "Google UK English Female",
+  "Google US English",
+  "Google US English Female",
+  "Google हिन्दी",
+  "Microsoft Zira Desktop - English (United States)"
+];
+const best = all.find(v => want.includes(v.name)) || all.find(v => /Google/i.test(v.name) && /English/i.test(v.lang)) || preferredVoice || all[0];
+if (best) {
+  u.voice = best;
+  u.lang = best.lang;
+} else {
+  console.warn("No preferred voice found; using default.");
+}
+
     u.rate = 0.97; u.pitch = 1.04;
     u.onend = ()=> setTimeout(res, c.endsWith(',') ? 120 : 220); // tiny pause between chunks
     speechSynthesis.speak(u);
@@ -185,6 +200,12 @@ async function speak(text){
     // if user barges in, abort speaking
     if (!ttsActive) return;
     log("Astra: "+c);
+    if(Math.random() < 0.25) {
+  console.log("🤖 Adding variation tone");
+  u.rate = 0.94 + Math.random()*0.08;
+  u.pitch = 0.98 + Math.random()*0.04;
+}
+
     await sayChunk(c);
   }
 
@@ -378,6 +399,7 @@ setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I'm ready. You ca
 </script>
 </body>
 </html>
+
 
 
 
