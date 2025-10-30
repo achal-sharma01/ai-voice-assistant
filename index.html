@@ -137,60 +137,54 @@ function humanize(text){
   return s;
 }
 function thinkPause(){ return new Promise(res=>{ setStatus("Thinking…",false); setTimeout(res, 300+Math.random()*500); }); }
+// --- Safe TTS that releases audio before mic restarts ---
 async function speak(text){
-  // Single-shot, no duplicates, no watchdog
-  await thinkPause();
-
-  // Cancel any pending/queued utterances, then prime
+  if (!text) return;
   try { speechSynthesis.cancel(); } catch {}
-  try { speechSynthesis.resume(); } catch {}
 
-  // Stop STT while we talk
   ttsActive = true;
-  try { if (rec) rec.stop(); } catch {}
+  setStatus("Thinking…", false);
+  log("Astra: " + text);
+
+  // stop recognizer if it’s still running
+  try { rec && rec.stop(); } catch {}
+
+  // small pause so Chrome releases the mic
+  await new Promise(r => setTimeout(r, 350));
 
   const u = new SpeechSynthesisUtterance(humanize(text));
-
-  // Hard-lock to English to avoid random language
-  u.lang = 'en-US';
-  if (preferredVoice) { try { u.voice = preferredVoice; } catch {} }
-
-  // Warm tone
+  u.lang = 'en-IN';
   u.rate = 0.97;
-  u.pitch = 1.04;
-  u.volume = 1.0;
+  u.pitch = 1.05;
+
+  const voices = speechSynthesis.getVoices() || [];
+  const v = voices.find(v => /Google/i.test(v.name) && /English/i.test(v.lang))
+           || voices.find(v => /en/i.test(v.lang))
+           || null;
+  if (v) u.voice = v;
 
   u.onstart = () => setStatus("Speaking…", false);
-
   u.onend = () => {
     ttsActive = false;
     setStatus("Listening…", true);
-    // cooldown so STT doesn't collide
-    setTimeout(() => {
+    // Wait a bit so Chrome frees the audio device before restarting recognition
+    setTimeout(()=>{
       if (listening && rec) {
-        try { rec.start(); } catch (e) { log("STT restart error: " + e.message); }
+        try { rec.start(); log("🎤 Mic restarted after speaking."); }
+        catch(e){ log("⚠️ Mic restart error: "+e.message); }
       }
-    }, 350);
+    }, 900);
   };
+  u.onerror = e => { ttsActive=false; log("TTS error: "+(e.error||'unknown')); };
 
-  u.onerror = (e) => {
-    ttsActive = false;
-    log("TTS error: " + (e.error || 'unknown'));
-    setStatus("Listening…", true);
-    try { if (listening && rec) rec.start(); } catch {}
-  };
-
-  log("Astra: " + u.text);
-
-  // Speak after a micro-tick (Chrome quirk)
-  setTimeout(() => {
-    try { speechSynthesis.speak(u); } catch (e) {
-      ttsActive = false;
-      setStatus("Listening…", true);
-      log("Speak error: " + e.message);
-    }
-  }, 20);
+  try {
+    speechSynthesis.speak(u);
+  } catch(e){
+    log("Speak error: "+e.message);
+    ttsActive=false;
+  }
 }
+
 
 /* ---------- Simulator (keep tiles alive until hardware plugs in) ---------- */
 setInterval(()=>{
@@ -461,6 +455,7 @@ window.addEventListener("load", () => {
 </script>
 </body>
 </html>
+
 
 
 
