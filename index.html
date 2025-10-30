@@ -140,29 +140,49 @@ function thinkPause(){ return new Promise(res=>{ setStatus("Thinking…",false);
 
 /* ---------- Speak (TTS-mute + barge-in) ---------- */
 async function speak(text){
-  // allow barge-in: if speaking, cancel and continue
-  try{ if(speechSynthesis.speaking) speechSynthesis.cancel(); }catch{}
+  // Safety: if something is already speaking, ignore new speech (prevents 'silent' bug)
+  if (ttsActive) return;
+
   await thinkPause();
 
-  ttsActive=true;
-  try{ rec && rec.stop(); }catch{}
+  // Stop any queued utterances cleanly
+  try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); } catch {}
 
-  const u=new SpeechSynthesisUtterance(humanize(text));
+  ttsActive = true;
+  try { rec && rec.stop(); } catch {}
+
+  const u = new SpeechSynthesisUtterance(humanize(text));
+
+  // Pick a solid voice
   const all = speechSynthesis.getVoices() || [];
   const want = ["Google UK English Female","Google US English","Google US English Female","Microsoft Zira Desktop - English (United States)"];
-  const best = all.find(v=>want.includes(v.name)) || preferredVoice || all[0];
+  const best = all.find(v => want.includes(v.name)) || (typeof preferredVoice !== "undefined" ? preferredVoice : null) || all[0];
 
-  if(best){ u.voice=best; u.lang=best.lang; } else { u.lang='en-IN'; }
-  u.rate=0.97; u.pitch=1.04; // warm & clear
-  u.onend=()=>{
-    ttsActive=false;
-    setStatus("Listening…",true);
-    setTimeout(()=>{ if(listening&&rec){ try{ rec.start(); }catch{} } }, 220);
+  if (best) { u.voice = best; u.lang = best.lang; } else { u.lang = 'en-IN'; }
+  u.rate = 0.97; u.pitch = 1.04; u.volume = 1.0;
+
+  u.onstart = () => { setStatus("Speaking…", false); };
+  u.onend   = () => {
+    ttsActive = false;
+    setStatus("Listening…", true);
+    // small cooldown so STT doesn't collide
+    setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
   };
-  speechSynthesis.speak(u);
-  log("Astra: "+u.text);
-}
+  u.onerror = (e) => {
+    ttsActive = false;
+    log("TTS error: " + (e.error || 'unknown'));
+    setStatus("Listening…", true);
+    try { if (listening && rec) rec.start(); } catch {}
+  };
 
+  log("Astra: " + u.text);
+
+  // Chrome quirk: speak after a short tick
+  setTimeout(() => {
+    try { speechSynthesis.resume(); } catch {}
+    speechSynthesis.speak(u);
+  }, 20);
+}
 /* ---------- Simulator (keep tiles alive until hardware plugs in) ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
@@ -293,16 +313,20 @@ function getRecognizer(){
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
   r.onend  =()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
   r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
-  r.onresult=async e=>{
-    // barge-in: if user talks while TTS, cancel and handle new input
-    const t=e.results[e.resultIndex][0].transcript.trim();
-    if(!t) return;
-    if(ttsActive){ try{ speechSynthesis.cancel(); }catch{} ttsActive=false; }
-    if(t===lastProcessed) return;
-    lastProcessed=t; log("You: "+t);
-    const res=intent(t);
+    r.onresult = async e => {
+    // If Astra is speaking, ignore interim speech (prevents 'silent' bug)
+    if (ttsActive) return;
+
+    const t = e.results[e.resultIndex][0].transcript.trim();
+    if (!t || t === lastProcessed) return;
+
+    lastProcessed = t;
+    log("You: " + t);
+
+    const res = intent(t);
     await handleIntent(res, t);
   };
+
   return r;
 }
 function startListening(){ if(listening) return; initVoice(); const r=getRecognizer(); if(!r) return; rec=r; listening=true; try{ rec.start(); }catch{} }
@@ -324,9 +348,13 @@ micBtn.addEventListener('click', ()=> listening?stopListening():startListening()
 
 /* ---------- First paint ---------- */
 setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
+    // Keep TTS alive on some Android builds
+setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
+
 </script>
 </body>
 </html>
+
 
 
 
