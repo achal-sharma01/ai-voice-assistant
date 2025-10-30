@@ -138,51 +138,102 @@ function humanize(text){
 }
 function thinkPause(){ return new Promise(res=>{ setStatus("Thinking…",false); setTimeout(res, 300+Math.random()*500); }); }
 
-/* ---------- Speak (TTS-mute + barge-in) ---------- */
-async function speak(text){
-  // Safety: if something is already speaking, ignore new speech (prevents 'silent' bug)
-  if (ttsActive) return;
 
+async function speak(text){
+  // Robust TTS: cancel anything, re-prime engine, and recover if events don't fire
   await thinkPause();
 
-  // Stop any queued utterances cleanly
-  try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); } catch {}
+  // Always cancel pending/queued items first
+  try { speechSynthesis.cancel(); } catch {}
 
+  // Prime/resume the engine (Chrome/Android quirk)
+  try { speechSynthesis.resume(); } catch {}
+
+  // Stop STT while we talk
   ttsActive = true;
-  try { rec && rec.stop(); } catch {}
+  try { if (rec) rec.stop(); } catch {}
 
-  const u = new SpeechSynthesisUtterance(humanize(text));
+  const utter = new SpeechSynthesisUtterance(humanize(text));
 
-  // Pick a solid voice
+  // Pick a reliable voice; fall back to generic en-US if needed
   const all = speechSynthesis.getVoices() || [];
-  const want = ["Google UK English Female","Google US English","Google US English Female","Microsoft Zira Desktop - English (United States)"];
-  const best = all.find(v => want.includes(v.name)) || (typeof preferredVoice !== "undefined" ? preferredVoice : null) || all[0];
+  const want = [
+    "Google UK English Female",
+    "Google US English",
+    "Google US English Female",
+    "Microsoft Zira Desktop - English (United States)"
+  ];
+  const best = all.find(v => want.includes(v.name)) ||
+               (typeof preferredVoice !== "undefined" ? preferredVoice : null) ||
+               all[0];
 
-  if (best) { u.voice = best; u.lang = best.lang; } else { u.lang = 'en-IN'; }
-  u.rate = 0.97; u.pitch = 1.04; u.volume = 1.0;
+  if (best) {
+    utter.voice = best;
+    utter.lang  = best.lang || 'en-US';
+  } else {
+    utter.lang = 'en-US';
+  }
 
-  u.onstart = () => { setStatus("Speaking…", false); };
-  u.onend   = () => {
+  // Warm, clear tone
+  utter.rate = 0.97;
+  utter.pitch = 1.04;
+  utter.volume = 1.0;
+
+  // --- Watchdog: if onstart doesn't fire, retry once with a safer lang ---
+  let started = false;
+  let ended   = false;
+  const watchdog = setTimeout(() => {
+    if (!started) {
+      // Retry with a very safe default
+      try { speechSynthesis.cancel(); } catch {}
+      try {
+        const retry = new SpeechSynthesisUtterance(humanize(text));
+        retry.lang = 'en-US';
+        retry.rate = 0.97; retry.pitch = 1.04; retry.volume = 1.0;
+        retry.onstart = () => { started = true; setStatus("Speaking…", false); };
+        retry.onend = () => {
+          ended = true; ttsActive = false; setStatus("Listening…", true);
+          setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
+        };
+        retry.onerror = () => {
+          ended = true; ttsActive = false; setStatus("Listening…", true);
+          try { if (listening && rec) rec.start(); } catch {}
+        };
+        speechSynthesis.speak(retry);
+      } catch {}
+    }
+  }, 800); // if no start in 800ms, retry
+
+  utter.onstart = () => { started = true; setStatus("Speaking…", false); };
+  utter.onend = () => {
+    ended = true;
+    clearTimeout(watchdog);
     ttsActive = false;
     setStatus("Listening…", true);
-    // small cooldown so STT doesn't collide
     setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
   };
-  u.onerror = (e) => {
+  utter.onerror = () => {
+    clearTimeout(watchdog);
+    ended = true;
     ttsActive = false;
-    log("TTS error: " + (e.error || 'unknown'));
+    log("TTS error: could not speak.");
     setStatus("Listening…", true);
     try { if (listening && rec) rec.start(); } catch {}
   };
 
-  log("Astra: " + u.text);
+  log("Astra: " + utter.text);
 
-  // Chrome quirk: speak after a short tick
+  // Speak (after a micro-tick)
   setTimeout(() => {
     try { speechSynthesis.resume(); } catch {}
-    speechSynthesis.speak(u);
-  }, 20);
+    try { speechSynthesis.speak(utter); } catch (e) {
+      // Final fallback: clear ttsActive so the next call can try again
+      ttsActive = false;
+      setStatus("Listening…", true);
+    }
+  }, 30);
 }
+
 /* ---------- Simulator (keep tiles alive until hardware plugs in) ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
@@ -354,6 +405,7 @@ setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
 </script>
 </body>
 </html>
+
 
 
 
