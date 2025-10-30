@@ -378,13 +378,23 @@ function stopMic(){
   try { rec && rec.stop(); } catch (e) { log("STT stop error: " + e.message); }
 }
 
-// Use multiple event types for reliable tapping on mobile
-["click","touchend","pointerup"].forEach(evt=>{
-  micBtn.addEventListener(evt, (e)=>{
-    e.preventDefault();
-    if (!listening) startMic(); else stopMic();
-  }, { passive:false });
-});
+// ✅ Fixed mic toggle (no double or instant stop)
+let micGuard = false;
+micBtn.addEventListener('pointerup', (e)=>{
+  e.preventDefault();
+  if (micGuard) return;
+  micGuard = true;
+
+  if (!listening) {
+    startMic();
+  } else {
+    stopMic();
+  }
+
+  // debounce: prevents duplicate clicks from firing twice
+  setTimeout(()=>{ micGuard = false; }, 300);
+}, { passive:false });
+
 /* ---------- First paint ---------- */
 setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
     // Keep TTS alive on some Android builds
@@ -393,6 +403,7 @@ setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
 </script>
 </body>
 </html>
+
 
 
 
