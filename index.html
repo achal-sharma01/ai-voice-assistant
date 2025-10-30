@@ -106,25 +106,25 @@ function refreshTiles(){
 function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
 function log(t){ const p=document.createElement('p'); p.textContent=t; logBox.appendChild(p); logBox.scrollTop=logBox.scrollHeight; }
 
-/* ---------- Voice: pick best human-like female on Chrome Android ---------- */
-let preferredVoice=null;
-function pickBestVoice(){
-  const voices=window.speechSynthesis.getVoices()||[];
-  if(!voices.length) return null;
-  const wantNames=[
-    "Google UK English Female",
-    "Google US English",
-    "Google US English Female",
-    "Microsoft Zira Desktop - English (United States)"
-  ];
-  return voices.find(v=>wantNames.includes(v.name))
-      || voices.find(v=>/Google/i.test(v.name)&&/English/i.test(v.lang))
-      || voices[0];
+/* ---------- Voice: HARD LOCK to a clear English voice ---------- */
+let preferredVoice = null;
+
+// Try strictly for "Google US English" first; if missing, use any English voice.
+// We will ALWAYS speak with en-US language to avoid weird pronunciations.
+function lockVoice() {
+  const voices = speechSynthesis.getVoices() || [];
+  // strict first choice
+  let v = voices.find(v => v.name === "Google US English");
+  // fallback: any Google English
+  if (!v) v = voices.find(v => /Google/i.test(v.name) && /en/i.test(v.lang));
+  // fallback: any English
+  if (!v) v = voices.find(v => /en/i.test(v.lang));
+  preferredVoice = v || null;
 }
-function initVoice(){ preferredVoice=pickBestVoice(); }
-speechSynthesis.onvoiceschanged=()=>{ initVoice(); };
-// Fallback in case Chrome doesn’t fire voiceschanged
-setTimeout(()=>{ try{ initVoice(); }catch{} }, 400);
+
+speechSynthesis.onvoiceschanged = () => { lockVoice(); };
+setTimeout(() => { try { lockVoice(); } catch {} }, 500); // fallback if event doesn’t fire
+
 
 /* ---------- Humanize + tiny “thinking” pause ---------- */
 function humanize(text){
@@ -140,100 +140,73 @@ function thinkPause(){ return new Promise(res=>{ setStatus("Thinking…",false);
 
 
 async function speak(text){
-  // Robust TTS: cancel anything, re-prime engine, and recover if events don't fire
-  await thinkPause();
-
-  // Always cancel pending/queued items first
+  // Cancel anything pending and prime engine
   try { speechSynthesis.cancel(); } catch {}
-
-  // Prime/resume the engine (Chrome/Android quirk)
   try { speechSynthesis.resume(); } catch {}
 
-  // Stop STT while we talk
+  await thinkPause();
+
   ttsActive = true;
   try { if (rec) rec.stop(); } catch {}
 
-  const utter = new SpeechSynthesisUtterance(humanize(text));
+  const u = new SpeechSynthesisUtterance(humanize(text));
 
-  // Pick a reliable voice; fall back to generic en-US if needed
-  const all = speechSynthesis.getVoices() || [];
-  const want = [
-    "Google UK English Female",
-    "Google US English",
-    "Google US English Female",
-    "Microsoft Zira Desktop - English (United States)"
-  ];
-  const best = all.find(v => want.includes(v.name)) ||
-               (typeof preferredVoice !== "undefined" ? preferredVoice : null) ||
-               all[0];
-
-  if (best) {
-    utter.voice = best;
-    utter.lang  = best.lang || 'en-US';
-  } else {
-    utter.lang = 'en-US';
+  // ALWAYS use en-US so the engine doesn’t switch to Hindi or odd accents
+  u.lang = 'en-US';
+  if (preferredVoice) {
+    try { u.voice = preferredVoice; } catch {}
   }
 
-  // Warm, clear tone
-  utter.rate = 0.97;
-  utter.pitch = 1.04;
-  utter.volume = 1.0;
+  // Warm tone
+  u.rate = 0.97;
+  u.pitch = 1.04;
+  u.volume = 1.0;
 
-  // --- Watchdog: if onstart doesn't fire, retry once with a safer lang ---
-  let started = false;
-  let ended   = false;
-  const watchdog = setTimeout(() => {
-    if (!started) {
-      // Retry with a very safe default
-      try { speechSynthesis.cancel(); } catch {}
-      try {
-        const retry = new SpeechSynthesisUtterance(humanize(text));
-        retry.lang = 'en-US';
-        retry.rate = 0.97; retry.pitch = 1.04; retry.volume = 1.0;
-        retry.onstart = () => { started = true; setStatus("Speaking…", false); };
-        retry.onend = () => {
-          ended = true; ttsActive = false; setStatus("Listening…", true);
-          setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
-        };
-        retry.onerror = () => {
-          ended = true; ttsActive = false; setStatus("Listening…", true);
-          try { if (listening && rec) rec.start(); } catch {}
-        };
-        speechSynthesis.speak(retry);
-      } catch {}
-    }
-  }, 800); // if no start in 800ms, retry
+  let finished = false;
 
-  utter.onstart = () => { started = true; setStatus("Speaking…", false); };
-  utter.onend = () => {
-    ended = true;
-    clearTimeout(watchdog);
+  u.onstart = () => { setStatus("Speaking…", false); };
+  u.onend = () => {
+    finished = true;
     ttsActive = false;
     setStatus("Listening…", true);
     setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
   };
-  utter.onerror = () => {
-    clearTimeout(watchdog);
-    ended = true;
+  u.onerror = () => {
+    finished = true;
     ttsActive = false;
-    log("TTS error: could not speak.");
+    log("TTS error: couldn’t speak.");
     setStatus("Listening…", true);
     try { if (listening && rec) rec.start(); } catch {}
   };
 
-  log("Astra: " + utter.text);
+  log("Astra: " + u.text);
 
-  // Speak (after a micro-tick)
+  // Speak after a tiny tick (Chrome quirk)
   setTimeout(() => {
     try { speechSynthesis.resume(); } catch {}
-    try { speechSynthesis.speak(utter); } catch (e) {
-      // Final fallback: clear ttsActive so the next call can try again
-      ttsActive = false;
-      setStatus("Listening…", true);
-    }
+    try { speechSynthesis.speak(u); } catch {}
   }, 30);
-}
 
+  // Safety watchdog: if nothing happened in 1s, try once more with no voice object
+  setTimeout(() => {
+    if (!finished) {
+      try { speechSynthesis.cancel(); } catch {}
+      const retry = new SpeechSynthesisUtterance(humanize(text));
+      retry.lang = 'en-US';
+      retry.rate = 0.97; retry.pitch = 1.04; retry.volume = 1.0;
+      retry.onend = () => {
+        ttsActive = false;
+        setStatus("Listening…", true);
+        setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 250);
+      };
+      retry.onerror = () => {
+        ttsActive = false; setStatus("Listening…", true);
+        try { if (listening && rec) rec.start(); } catch {}
+      };
+      try { speechSynthesis.speak(retry); } catch {}
+    }
+  }, 1000);
+}
 /* ---------- Simulator (keep tiles alive until hardware plugs in) ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
@@ -405,6 +378,7 @@ setTimeout(()=>{ try { speechSynthesis.resume(); } catch {} }, 500);
 </script>
 </body>
 </html>
+
 
 
 
