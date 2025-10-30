@@ -72,9 +72,10 @@
     <p class="muted">Say: “turn the light on”, “turn off the fan”, “what’s the time”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
   </div>
 </div>
+  <script>
+/* === ASTRA — Human-like web assistant: natural female voice, thinking, small-talk, memory === */
+/* Keeps: always-on listening, TTS-mute (no feedback loop), dashboard tiles, manual controls */
 
-<script>
-/* === ESB CORE with Dashboard Tiles === */
 let listening=false, rec=null, ttsActive=false, lastProcessed="";
 const logBox=document.getElementById('log'), dot=document.getElementById('dot'), statusEl=document.getElementById('status'), micBtn=document.getElementById('micBtn');
 
@@ -83,14 +84,13 @@ let cache={light:0, fan:0, temp:27.0, hum:48.0, people:1};
 let _lightOnAt=null, _fanOnAt=null;
 const LIGHT_WATTS=12, FAN_WATTS=75, INR_PER_KWH=8;
 
-// tile refs
+// dashboard tiles
 const kLight=document.getElementById('kLight');
 const kFan  =document.getElementById('kFan');
 const kPeople=document.getElementById('kPeople');
 const kTemp =document.getElementById('kTemp');
 const kHum  =document.getElementById('kHum');
 const kCmds =document.getElementById('kCmds');
-
 function refreshTiles(){
   kLight.textContent = cache.light? "ON":"OFF";
   kFan.textContent   = cache.fan?   "ON":"OFF";
@@ -100,21 +100,77 @@ function refreshTiles(){
   kCmds.textContent  = counters.cmds;
 }
 
-function log(t){const p=document.createElement('p');p.textContent=t;logBox.appendChild(p);logBox.scrollTop=logBox.scrollHeight;}
-function setStatus(t,ok){statusEl.textContent=t;dot.classList.toggle('ok',!!ok);}
+// ---------- Voice: pick best human-like female on Chrome Android ----------
+let preferredVoice = null;
+function pickBestVoice(){
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+  // prefer Google female English (India/US/UK)
+  const byPref = [
+    v => /en-IN/i.test(v.lang) && /female|woman|girl/i.test(v.name),
+    v => /en-IN/i.test(v.lang) && /Google/i.test(v.name),
+    v => /en-(GB|US)/i.test(v.lang) && /female|woman|girl/i.test(v.name),
+    v => /Google/i.test(v.name) && /en/i.test(v.lang),
+    v => /en/i.test(v.lang)
+  ];
+  for (const rule of byPref){
+    const hit = voices.find(rule);
+    if (hit) return hit;
+  }
+  return voices[0];
+}
+function initVoice(){
+  preferredVoice = pickBestVoice();
+}
+speechSynthesis.onvoiceschanged = ()=>{ initVoice(); };
 
-function speak(text){
-  try{
-    ttsActive=true; try{ rec && rec.stop(); }catch{}
-    const u=new SpeechSynthesisUtterance(text);
-    u.lang='en-IN'; u.rate=1.0; u.pitch=1;
-    u.onend=()=>{ ttsActive=false; setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 180); };
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
-    log("Astra: "+text);
-  }catch(e){log("TTS error: "+e);}
+// ---------- Speak (mutes mic while talking; adds “thinking” feel) ----------
+function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
+function log(t){ const p=document.createElement('p'); p.textContent=t; logBox.appendChild(p); logBox.scrollTop=logBox.scrollHeight; }
+
+function humanize(text){
+  // light touches: contractions + softeners + pauses
+  let s = text
+    .replace(/\bis not\b/gi, "isn't")
+    .replace(/\bI am\b/gi, "I'm")
+    .replace(/\bdo not\b/gi, "don't")
+    .replace(/\bwe will\b/gi, "we'll");
+  // add small natural pauses
+  s = s.replace(/, /g, ", … ");
+  return s;
 }
 
-/* Simulator keeps values changing + refresh tiles */
+function thinkPause(){
+  return new Promise(res=>{
+    setStatus("Thinking…", false);
+    setTimeout(()=>res(), 300 + Math.random()*500);
+  });
+}
+
+async function speak(text){
+  try{
+    await thinkPause();
+    ttsActive = true;
+    try{ rec && rec.stop(); }catch{}
+    const u=new SpeechSynthesisUtterance(humanize(text));
+    u.lang = (preferredVoice && preferredVoice.lang) ? preferredVoice.lang : 'en-IN';
+    if (preferredVoice) u.voice = preferredVoice;
+    u.rate = 0.98;   // slightly slower for warmth
+    u.pitch = 1.03;  // gentle lift
+    u.onend = ()=>{
+      ttsActive=false;
+      setStatus("Listening…", true);
+      setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 180);
+    };
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    log("Astra: "+u.text);
+  }catch(e){
+    log("TTS error: "+e);
+  }
+}
+
+// ---------- Simulator to keep tiles alive ----------
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
   cache.hum =Math.max(30,Math.min(70,cache.hum +(Math.random()*0.8-0.4)));
@@ -126,46 +182,97 @@ setInterval(()=>{
   refreshTiles();
 },1200);
 
-/* Energy helpers */
+// ---------- Energy helpers ----------
 const nowMs=()=>performance.now();
 const kwh=(ms,w)=>(ms/3600000)*(w/1000);
-function startRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt==null)_lightOnAt=t; if(what==='fan'&&_fanOnAt==null)_fanOnAt=t;}
-function finishRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt!=null){counters.light_ms+=t-_lightOnAt; _lightOnAt=null;}
-                         if(what==='fan'  &&_fanOnAt  !=null){counters.fan_ms  +=t-_fanOnAt;   _fanOnAt  =null;} }
+function startRun(what){ const t=nowMs(); if(what==='light'&&_lightOnAt==null)_lightOnAt=t; if(what==='fan'&&_fanOnAt==null)_fanOnAt=t; }
+function finishRun(what){ const t=nowMs(); if(what==='light'&&_lightOnAt!=null){ counters.light_ms+=t-_lightOnAt; _lightOnAt=null; }
+                          if(what==='fan'  &&_fanOnAt  !=null){ counters.fan_ms  +=t-_fanOnAt;   _fanOnAt  =null; } }
 const fmtMs=ms=>{const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000); return (h?`${h}h `:"")+`${m}m`;};
-function usage(){const t=nowMs(); const lms=counters.light_ms+(_lightOnAt? t-_lightOnAt:0); const fms=counters.fan_ms+(_fanOnAt? t-_fanOnAt:0);
-  const lk=kwh(lms,LIGHT_WATTS), fk=kwh(fms,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH; return {lms,fms,lk,fk,tk,cost};}
+function usage(){ const t=nowMs(); const lms=counters.light_ms+(_lightOnAt? t-_lightOnAt:0); const fms=counters.fan_ms+(_fanOnAt? t-_fanOnAt:0);
+  const lk=kwh(lms,LIGHT_WATTS), fk=kwh(fms,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH; return {lms,fms,lk,fk,tk,cost}; }
 
-/* INTENT — Always-on, robust */
+// ---------- Tiny “brain”: memory + small talk + math + intents ----------
+const MEM = []; // last few turns
+function remember(user, astra){ MEM.push({user, astra}); if(MEM.length>8) MEM.shift(); }
+
+const JOKES=[
+  "Why did the computer get cold? It forgot to close its Windows.",
+  "Why do programmers prefer dark mode? Because light attracts bugs.",
+  "Parallel lines have so much in common… it’s a shame they’ll never meet."
+];
+const FACTS=[
+  "Honey never spoils — even after thousands of years.",
+  "Octopuses have three hearts and blue blood.",
+  "Bananas are berries, but strawberries aren’t.",
+  "Your phone has more computing power than Apollo’s onboard computers."
+];
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function tryMath(s){
+  if(!/\b(what is|calculate|calc|evaluate)\b/.test(s)) return null;
+  const expr = s.replace(/.*?\b(what is|calculate|calc|evaluate)\s*/,'').replace(/[^0-9+\-*/().\s]/g,'').trim();
+  if(!expr) return "Tell me the equation you want me to solve.";
+  try{ const val = Function(`"use strict"; return (${expr})`)(); if(isFinite(val)) return `The answer is ${val}.`; }catch{}
+  return "Hmm, I couldn't compute that one.";
+}
+
+function naturalReply(s){
+  const last = MEM.length ? MEM[MEM.length-1].user : "";
+  const soft = ["Got it.","Okay.","Noted.","Alright.","Sure."];
+  if (last && Math.random()<0.35) return `${pick(soft)} About what you said earlier — "${last}" — I kept that in mind.`;
+  return pick(soft)+" "+s;
+}
+
 function intent(text){
   let s=(text||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
   if(!s) return {type:"idle"};
-  const has=w=>s.includes(w); const any=(...a)=>a.some(w=>has(w));
-  if(s.split(" ").length===1 && !any("time","temp","light","fan","report","energy","humidity","people")) return {type:"idle"};
+  const has=w=>s.includes(w), any=(...a)=>a.some(w=>has(w));
 
-  if(any("hello","hi","hey","good morning","good afternoon","good evening")) return {type:"greet"};
-  if(has("how are you")) return {type:"how"};
+  // Small talk first
+  if(any("how are you","how r u","how are u")) return {type:"say", text: pick([
+    "I'm feeling great and ready to help. How are you?",
+    "All good here — calm, focused, and listening.",
+    "Doing well! Thanks for asking."
+  ])};
+  if(any("your name","who are you")) return {type:"say", text:"I'm Astra — your friendly room assistant."};
+  if(any("what can you do","help","capabilities")) return {type:"say", text:"I can chat naturally, control light and fan, report temperature, humidity and people count, tell jokes, do quick math, and summarize usage with energy estimates."};
+  if(any("thank you","thanks")) return {type:"say", text: pick(["Anytime!","You're welcome.","Happy to help."])};
+  if(any("good morning","good afternoon","good evening","good night")){
+    const m = s.match(/good (morning|afternoon|evening|night)/i);
+    return {type:"say", text:`Good ${m?m[1]:"day"}, Achal.`};
+  }
+  if(any("tell me a joke","joke","make me laugh")) return {type:"say", text: pick(JOKES)};
+  if(any("fun fact","tell me a fact","fact")) return {type:"say", text: pick(FACTS)};
+  const mathAns = tryMath(s); if(mathAns) return {type:"say", text: mathAns};
+
+  // Info
   if(any("what is the time","what's the time","whats the time","time now","tell time","time")) return {type:"time"};
-
   if(any("temperature","temp","how hot")) return {type:"temp"};
   if(any("humidity","how humid")) return {type:"hum"};
   if(any("how many people","people inside","people count","people")) return {type:"people"};
 
+  // Device control — both word orders
   if( (has("light")&&has("on")) || any("turn on light","switch on light","light on","turn the light on") ){ if(!has("off")) return {type:"light",val:1}; }
   if( (has("light")&&has("off"))|| any("turn off light","switch off light","light off","turn the light off") ) return {type:"light",val:0};
   if( (has("fan")&&has("on"))   || any("turn on fan","switch on fan","fan on","turn the fan on") ){ if(!has("off")) return {type:"fan",val:1}; }
   if( (has("fan")&&has("off"))  || any("turn off fan","switch off fan","fan off","turn the fan off") ) return {type:"fan",val:0};
 
+  // Reports / usage
   if(any("report","summary","status")) return {type:"report"};
-  if(any("fan usage","fan count","how many times fan")) return {type:"fan_count"};
-  if(any("light usage","light count","how many times light")) return {type:"light_count"};
-  if(any("energy","power","consumption","units")) return {type:"energy"};
+  if(any("fan usage","fan count","how many times fan")) return {type:"say", text:`The fan ran ${counters.fan_on_events} times.`};
+  if(any("light usage","light count","how many times light")) return {type:"say", text:`The light ran ${counters.light_on_events} times.`};
+  if(any("energy","power","consumption","units")) {
+    const u=usage(); return {type:"say", text:`Energy so far is ${u.tk.toFixed(3)} kilowatt hours, around rupees ${u.cost.toFixed(2)}.`};
+  }
 
   if(any("stop","exit","quit")) return {type:"stop"};
-  return {type:"chat", raw:s};
+
+  // Friendly fallback
+  return {type:"say", text: naturalReply(s)};
 }
 
-/* Actions */
+// ---------- Actions ----------
 function setDevice(dev,val){
   if(dev==='light'){ if(val && !cache.light){ counters.light_on_events++; startRun('light'); }
                      if(!val && cache.light){ finishRun('light'); } }
@@ -174,40 +281,36 @@ function setDevice(dev,val){
   cache[dev]=val?1:0;
   counters.cmds++;
   refreshTiles();
-  speak(val?`Turning on the ${dev}.`:`Turning the ${dev} off.`);
+  return val?`Turning on the ${dev}.`:`Turning the ${dev} off.`;
 }
 function report(){
   const u=usage();
   return [
-    `Commands today: ${counters.cmds}.`,
-    `Light ${cache.light?'on':'off'} (${counters.light_on_events} times, ${fmtMs(u.lms)}).`,
-    `Fan ${cache.fan?'on':'off'} (${counters.fan_on_events} times, ${fmtMs(u.fms)}).`,
+    "Here’s the room status.",
+    `Light ${cache.light?'on':'off'} — ${counters.light_on_events} times, ${fmtMs(u.lms)} total.`,
+    `Fan ${cache.fan?'on':'off'} — ${counters.fan_on_events} times, ${fmtMs(u.fms)} total.`,
     `People ${cache.people} (entries +${counters.people_entries}).`,
     `Temperature ${cache.temp.toFixed(1)}°C, humidity ${cache.hum.toFixed(1)}%.`,
-    `Energy ~ ${u.tk.toFixed(3)} kWh (₹${u.cost.toFixed(2)}).`
+    `Energy about ${u.tk.toFixed(3)} kWh (₹${u.cost.toFixed(2)}).`
   ].join(" ");
 }
-function handleIntent(res){
+
+async function handleIntent(res, raw){
   switch(res.type){
     case "idle": return;
-    case "greet":{const h=new Date().getHours(); const g=h<12?"Good morning":h<18?"Good afternoon":"Good evening"; return speak(`${g}, Achal.`);}
-    case "how": return speak("All systems ready.");
-    case "time": return speak("It's "+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
-    case "temp": return speak(`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`);
-    case "hum":  return speak(`Humidity is ${cache.hum.toFixed(1)} percent.`);
-    case "people": return speak(`People in room: ${cache.people}.`);
-    case "light": return setDevice("light",res.val);
-    case "fan":   return setDevice("fan",res.val);
-    case "report": return speak(report());
-    case "fan_count": return speak(`The fan ran ${counters.fan_on_events} times.`);
-    case "light_count": return speak(`The light ran ${counters.light_on_events} times.`);
-    case "energy": {const u=usage(); return speak(`Energy so far is ${u.tk.toFixed(3)} kilowatt hours, about rupees ${u.cost.toFixed(2)}.`);}
-    case "stop": stopListening(); return speak("Stopping now. Bye!");
-    case "chat": return speak(["Okay.","Noted.","I hear you.","Sure."][Math.floor(Math.random()*4)]+" "+res.raw);
+    case "say": remember(raw, res.text); return speak(res.text);
+    case "time": { const t = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); const msg=`It's ${t}.`; remember(raw,msg); return speak(msg); }
+    case "temp": { const msg=`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`; remember(raw,msg); return speak(msg); }
+    case "hum":  { const msg=`Humidity is ${cache.hum.toFixed(1)} percent.`; remember(raw,msg); return speak(msg); }
+    case "people": { const msg=`People in room: ${cache.people}.`; remember(raw,msg); return speak(msg); }
+    case "light": { const msg = setDevice("light", res.val); remember(raw,msg); return speak(msg); }
+    case "fan":   { const msg = setDevice("fan", res.val); remember(raw,msg); return speak(msg); }
+    case "report": { const msg = report(); remember(raw,msg); return speak(msg); }
+    case "stop": listening=false; try{ rec&&rec.stop(); }catch{}; return speak("Okay, I’ll be quiet now.");
   }
 }
 
-/* STT (Always-on) with TTS guard */
+// ---------- STT (Always-on) with TTS guard ----------
 function getRecognizer(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ alert("Your browser doesn't support SpeechRecognition. Use Chrome on Android with HTTPS."); return null; }
@@ -215,33 +318,35 @@ function getRecognizer(){
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
   r.onend=()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
   r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
-  r.onresult=e=>{
+  r.onresult=async e=>{
     if(ttsActive) return;
     const t=e.results[e.resultIndex][0].transcript.trim();
     if(!t || t===lastProcessed) return;
     lastProcessed=t; log("You: "+t);
-    handleIntent(intent(t));
+    const res = intent(t);
+    await handleIntent(res, t);
   };
   return r;
 }
-function startListening(){ if(listening) return; const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); try{ rec.start(); }catch{} }
+function startListening(){ if(listening) return; initVoice(); const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); try{ rec.start(); }catch{} }
 function stopListening(){ listening=false; try{ rec&&rec.stop(); }catch{} }
 
-/* Buttons (manual controls you already had) */
-document.getElementById('btnLightOn').onclick=()=>handleIntent({type:"light",val:1});
-document.getElementById('btnLightOff').onclick=()=>handleIntent({type:"light",val:0});
-document.getElementById('btnFanOn').onclick=()=>handleIntent({type:"fan",val:1});
-document.getElementById('btnFanOff').onclick=()=>handleIntent({type:"fan",val:0});
-document.getElementById('btnReport').onclick=()=>handleIntent({type:"report"});
+// Buttons
+document.getElementById('btnLightOn').onclick=()=>handleIntent({type:"light",val:1}, "button: light on");
+document.getElementById('btnLightOff').onclick=()=>handleIntent({type:"light",val:0}, "button: light off");
+document.getElementById('btnFanOn').onclick=()=>handleIntent({type:"fan",val:1}, "button: fan on");
+document.getElementById('btnFanOff').onclick=()=>handleIntent({type:"fan",val:0}, "button: fan off");
+document.getElementById('btnReport').onclick=()=>handleIntent({type:"report"}, "button: report");
 document.getElementById('btnReset').onclick=()=>{ finishRun('light'); finishRun('fan');
   counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0;
-  refreshTiles(); speak("Counters reset."); };
+  refreshTiles(); speak("Done. I’ve reset the counters."); };
 
-/* Mic button */
+// Mic
 micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
 
-/* Ready */
-setTimeout(()=>{ refreshTiles(); speak('Astra is ready. Try: temperature, humidity, people, or turn the light on.'); },350);
+// First paint
+setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I'm ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
 </script>
 </body>
 </html>
+
