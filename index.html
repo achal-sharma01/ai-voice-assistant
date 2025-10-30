@@ -123,6 +123,8 @@ function initVoice(){
   preferredVoice = pickBestVoice();
 }
 speechSynthesis.onvoiceschanged = ()=>{ initVoice(); };
+    // Fallback: populate voices even if voiceschanged doesn't fire
+setTimeout(()=> { try { initVoice(); } catch(e){} }, 400);
 
 // ---------- Speak (mutes mic while talking; adds “thinking” feel) ----------
 function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
@@ -155,6 +157,12 @@ async function speak(text){
     const u=new SpeechSynthesisUtterance(humanize(text));
     u.lang = (preferredVoice && preferredVoice.lang) ? preferredVoice.lang : 'en-IN';
     if (preferredVoice) u.voice = preferredVoice;
+    // Try some high-quality female voices if available
+const want = ["Google UK English Female", "Google US English", "Google हिन्दी", "Microsoft Zira Desktop - English (United States)"];
+const all = speechSynthesis.getVoices() || [];
+const best = all.find(v => want.includes(v.name));
+if (best) { u.voice = best; u.lang = best.lang; }
+
     u.rate = 0.98;   // slightly slower for warmth
     u.pitch = 1.03;  // gentle lift
     u.onend = ()=>{
@@ -318,14 +326,20 @@ function getRecognizer(){
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
   r.onend=()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
   r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
-  r.onresult=async e=>{
-    if(ttsActive) return;
-    const t=e.results[e.resultIndex][0].transcript.trim();
-    if(!t || t===lastProcessed) return;
-    lastProcessed=t; log("You: "+t);
-    const res = intent(t);
-    await handleIntent(res, t);
-  };
+  r.onresult = async e => {
+  // Allow interrupting Astra mid-speech
+  if (ttsActive) { try { speechSynthesis.cancel(); } catch {} ttsActive = false; }
+
+  const t = e.results[e.resultIndex][0].transcript.trim();
+  if (!t || t === lastProcessed) return;
+
+  lastProcessed = t;
+  log("You: " + t);
+
+  const res = intent(t);
+  await handleIntent(res, t);
+};
+
   return r;
 }
 function startListening(){ if(listening) return; initVoice(); const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); try{ rec.start(); }catch{} }
@@ -349,4 +363,5 @@ setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I'm ready. You ca
 </script>
 </body>
 </html>
+
 
