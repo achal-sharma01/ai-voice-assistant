@@ -34,6 +34,7 @@
 </style>
 </head>
 <body>
+  <audio id="ttsAudio" preload="auto"></audio>
 <div class="wrap">
   <div class="card">
     <h1>🤖 Astra — Emergency Stable Build + Dashboard</h1>
@@ -148,34 +149,48 @@ function thinkPause(){
     setTimeout(()=>res(), 300 + Math.random()*500);
   });
 }
+const ttsAudio = document.getElementById('ttsAudio');
+
+function splitIntoChunks(s){
+  // split on sentence boundaries and commas for natural pacing
+  return s.replace(/\s+/g,' ').trim()
+          .split(/(?<=[.!?])\s+|,\s+/)
+          .filter(Boolean).slice(0,12); // safety cap
+}
 
 async function speak(text){
-  try{
-    await thinkPause();
-    ttsActive = true;
-    try{ rec && rec.stop(); }catch{}
-    const u=new SpeechSynthesisUtterance(humanize(text));
-    u.lang = (preferredVoice && preferredVoice.lang) ? preferredVoice.lang : 'en-IN';
-    if (preferredVoice) u.voice = preferredVoice;
-    // Try some high-quality female voices if available
-const want = ["Google UK English Female", "Google US English", "Google हिन्दी", "Microsoft Zira Desktop - English (United States)"];
-const all = speechSynthesis.getVoices() || [];
-const best = all.find(v => want.includes(v.name));
-if (best) { u.voice = best; u.lang = best.lang; }
+  // barge-in: stop anything playing
+  try{ speechSynthesis.cancel(); }catch{}
+  if (!ttsAudio.paused) { ttsAudio.pause(); ttsAudio.currentTime = 0; }
+  await thinkPause();
 
-    u.rate = 0.98;   // slightly slower for warmth
-    u.pitch = 1.03;  // gentle lift
-    u.onend = ()=>{
-      ttsActive=false;
-      setStatus("Listening…", true);
-      setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 180);
-    };
-    speechSynthesis.cancel();
+  // fallback to Web Speech (still better pacing)
+  ttsActive = true;
+  try{ rec && rec.stop(); }catch{}
+  const chunks = splitIntoChunks(humanize(text));
+
+  const sayChunk = (c) => new Promise(res=>{
+    const u = new SpeechSynthesisUtterance(c);
+    const all = speechSynthesis.getVoices() || [];
+    // prefer your chosen voice, else nice Google female if present
+    const want = ["Google UK English Female","Google US English","Microsoft Zira Desktop - English (United States)"];
+    const best = all.find(v=> want.includes(v.name)) || preferredVoice || all[0];
+    if (best){ u.voice = best; u.lang = best.lang; }
+    u.rate = 0.97; u.pitch = 1.04;
+    u.onend = ()=> setTimeout(res, c.endsWith(',') ? 120 : 220); // tiny pause between chunks
     speechSynthesis.speak(u);
-    log("Astra: "+u.text);
-  }catch(e){
-    log("TTS error: "+e);
+  });
+
+  for (const c of chunks){
+    // if user barges in, abort speaking
+    if (!ttsActive) return;
+    log("Astra: "+c);
+    await sayChunk(c);
   }
+
+  ttsActive = false;
+  setStatus("Listening…",true);
+  setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 160);
 }
 
 // ---------- Simulator to keep tiles alive ----------
@@ -363,5 +378,6 @@ setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I'm ready. You ca
 </script>
 </body>
 </html>
+
 
 
