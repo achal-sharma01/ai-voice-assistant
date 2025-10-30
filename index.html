@@ -74,75 +74,71 @@
   </div>
 </div>
   <script>
-/* === ASTRA — Human-like web assistant: natural female voice, thinking, small-talk, memory === */
-/* Keeps: always-on listening, TTS-mute (no feedback loop), dashboard tiles, manual controls */
+/* === ASTRA: Stable & Human-like AI Voice Assistant (Final Version) === */
 
-let listening=false, rec=null, ttsActive=false, lastProcessed="";
-const logBox=document.getElementById('log'), dot=document.getElementById('dot'), statusEl=document.getElementById('status'), micBtn=document.getElementById('micBtn');
+let listening = false, rec = null, ttsActive = false, lastProcessed = "";
+const logBox = document.getElementById('log');
+const dot = document.getElementById('dot');
+const statusEl = document.getElementById('status');
+const micBtn = document.getElementById('micBtn');
+const ttsAudio = document.getElementById('ttsAudio');
 
-const counters={cmds:0, light_on_events:0, fan_on_events:0, light_ms:0, fan_ms:0, people_entries:0};
-let cache={light:0, fan:0, temp:27.0, hum:48.0, people:1};
-let _lightOnAt=null, _fanOnAt=null;
-const LIGHT_WATTS=12, FAN_WATTS=75, INR_PER_KWH=8;
+const counters = {cmds:0, light_on_events:0, fan_on_events:0, light_ms:0, fan_ms:0, people_entries:0};
+let cache = {light:0, fan:0, temp:27.0, hum:48.0, people:1};
+let _lightOnAt = null, _fanOnAt = null;
 
-// dashboard tiles
+const LIGHT_WATTS = 12, FAN_WATTS = 75, INR_PER_KWH = 8;
+
+// Dashboard
 const kLight=document.getElementById('kLight');
-const kFan  =document.getElementById('kFan');
+const kFan=document.getElementById('kFan');
 const kPeople=document.getElementById('kPeople');
-const kTemp =document.getElementById('kTemp');
-const kHum  =document.getElementById('kHum');
-const kCmds =document.getElementById('kCmds');
+const kTemp=document.getElementById('kTemp');
+const kHum=document.getElementById('kHum');
+const kCmds=document.getElementById('kCmds');
+
 function refreshTiles(){
-  kLight.textContent = cache.light? "ON":"OFF";
-  kFan.textContent   = cache.fan?   "ON":"OFF";
-  kPeople.textContent= cache.people;
-  kTemp.textContent  = cache.temp.toFixed(1);
-  kHum.textContent   = cache.hum.toFixed(1);
-  kCmds.textContent  = counters.cmds;
+  kLight.textContent = cache.light ? "ON" : "OFF";
+  kFan.textContent = cache.fan ? "ON" : "OFF";
+  kPeople.textContent = cache.people;
+  kTemp.textContent = cache.temp.toFixed(1);
+  kHum.textContent = cache.hum.toFixed(1);
+  kCmds.textContent = counters.cmds;
 }
 
-// ---------- Voice: pick best human-like female on Chrome Android ----------
+// Voice setup
 let preferredVoice = null;
 function pickBestVoice(){
   const voices = window.speechSynthesis.getVoices() || [];
-  if (!voices.length) return null;
-  // prefer Google female English (India/US/UK)
-  const byPref = [
-    v => /en-IN/i.test(v.lang) && /female|woman|girl/i.test(v.name),
-    v => /en-IN/i.test(v.lang) && /Google/i.test(v.name),
-    v => /en-(GB|US)/i.test(v.lang) && /female|woman|girl/i.test(v.name),
-    v => /Google/i.test(v.name) && /en/i.test(v.lang),
-    v => /en/i.test(v.lang)
+  const want = [
+    "Google UK English Female",
+    "Google US English",
+    "Google US English Female",
+    "Microsoft Zira Desktop - English (United States)"
   ];
-  for (const rule of byPref){
-    const hit = voices.find(rule);
-    if (hit) return hit;
-  }
-  return voices[0];
+  const best = voices.find(v => want.includes(v.name)) ||
+               voices.find(v => /Google/i.test(v.name) && /English/i.test(v.lang)) ||
+               voices[0];
+  return best || voices[0];
 }
 function initVoice(){
   preferredVoice = pickBestVoice();
 }
-speechSynthesis.onvoiceschanged = ()=>{ initVoice(); };
-    // Fallback: populate voices even if voiceschanged doesn't fire
-setTimeout(()=> { try { initVoice(); } catch(e){} }, 400);
+speechSynthesis.onvoiceschanged = ()=> initVoice();
 
-// ---------- Speak (mutes mic while talking; adds “thinking” feel) ----------
-function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
+// Utility
+function setStatus(t, ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
 function log(t){ const p=document.createElement('p'); p.textContent=t; logBox.appendChild(p); logBox.scrollTop=logBox.scrollHeight; }
 
 function humanize(text){
-  // light touches: contractions + softeners + pauses
   let s = text
     .replace(/\bis not\b/gi, "isn't")
     .replace(/\bI am\b/gi, "I'm")
     .replace(/\bdo not\b/gi, "don't")
     .replace(/\bwe will\b/gi, "we'll");
-  // add small natural pauses
   s = s.replace(/, /g, ", … ");
   if (!/[.!?]$/.test(s)) s += ".";
-s = s.charAt(0).toUpperCase() + s.slice(1);
-
+  s = s.charAt(0).toUpperCase() + s.slice(1);
   return s;
 }
 
@@ -152,69 +148,55 @@ function thinkPause(){
     setTimeout(()=>res(), 300 + Math.random()*500);
   });
 }
-const ttsAudio = document.getElementById('ttsAudio');
 
+// Split long text into safe chunks
 function splitIntoChunks(s){
-  // split on sentence boundaries and commas for natural pacing
   return s.replace(/\s+/g,' ').trim()
           .split(/(?<=[.!?])\s+|,\s+/)
-          .filter(Boolean).slice(0,12); // safety cap
+          .filter(Boolean)
+          .slice(0,10);
 }
 
+// === SPEAK FUNCTION ===
 async function speak(text){
-  // barge-in: stop anything playing
-  try{ speechSynthesis.cancel(); }catch{}
-  if (!ttsAudio.paused) { ttsAudio.pause(); ttsAudio.currentTime = 0; }
-  await thinkPause();
+  if (ttsActive) {
+    console.warn("⚠️ Astra already speaking — skipping new speech");
+    return;
+  }
 
-  // fallback to Web Speech (still better pacing)
+  try { if (speechSynthesis.speaking) speechSynthesis.cancel(); } catch(e) { console.warn(e); }
+  if (!ttsAudio.paused) { ttsAudio.pause(); ttsAudio.currentTime = 0; }
+
+  await thinkPause();
   ttsActive = true;
-  try{ rec && rec.stop(); }catch{}
+  try { rec && rec.stop(); } catch {}
+
   const chunks = splitIntoChunks(humanize(text));
+  const all = speechSynthesis.getVoices() || [];
+  const want = ["Google UK English Female","Google US English","Google US English Female","Microsoft Zira Desktop - English (United States)"];
+  const best = all.find(v => want.includes(v.name)) || preferredVoice || all[0];
 
   const sayChunk = (c) => new Promise(res=>{
     const u = new SpeechSynthesisUtterance(c);
-    // Auto-pick the best available realistic female voice
-const all = speechSynthesis.getVoices() || [];
-const want = [
-  "Google UK English Female",
-  "Google US English",
-  "Google US English Female",
-  "Google हिन्दी",
-  "Microsoft Zira Desktop - English (United States)"
-];
-const best = all.find(v => want.includes(v.name)) || all.find(v => /Google/i.test(v.name) && /English/i.test(v.lang)) || preferredVoice || all[0];
-if (best) {
-  u.voice = best;
-  u.lang = best.lang;
-} else {
-  console.warn("No preferred voice found; using default.");
-}
-
-    u.rate = 0.97; u.pitch = 1.04;
-    u.onend = ()=> setTimeout(res, c.endsWith(',') ? 120 : 220); // tiny pause between chunks
+    if (best){ u.voice = best; u.lang = best.lang; }
+    u.rate = 0.96 + Math.random()*0.05;
+    u.pitch = 1.0 + Math.random()*0.05;
+    u.onend = ()=> setTimeout(res, 180);
     speechSynthesis.speak(u);
   });
 
   for (const c of chunks){
-    // if user barges in, abort speaking
     if (!ttsActive) return;
     log("Astra: "+c);
-    if(Math.random() < 0.25) {
-  console.log("🤖 Adding variation tone");
-  u.rate = 0.94 + Math.random()*0.08;
-  u.pitch = 0.98 + Math.random()*0.04;
-}
-
     await sayChunk(c);
   }
 
   ttsActive = false;
-  setStatus("Listening…",true);
-  setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 160);
+  setStatus("Listening…", true);
+  setTimeout(()=>{ if(listening && rec){ try{ rec.start(); }catch{} } }, 1000);
 }
 
-// ---------- Simulator to keep tiles alive ----------
+// Simulated data updater
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
   cache.hum =Math.max(30,Math.min(70,cache.hum +(Math.random()*0.8-0.4)));
@@ -226,7 +208,7 @@ setInterval(()=>{
   refreshTiles();
 },1200);
 
-// ---------- Energy helpers ----------
+// Energy usage helpers
 const nowMs=()=>performance.now();
 const kwh=(ms,w)=>(ms/3600000)*(w/1000);
 function startRun(what){ const t=nowMs(); if(what==='light'&&_lightOnAt==null)_lightOnAt=t; if(what==='fan'&&_fanOnAt==null)_fanOnAt=t; }
@@ -236,169 +218,94 @@ const fmtMs=ms=>{const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000
 function usage(){ const t=nowMs(); const lms=counters.light_ms+(_lightOnAt? t-_lightOnAt:0); const fms=counters.fan_ms+(_fanOnAt? t-_fanOnAt:0);
   const lk=kwh(lms,LIGHT_WATTS), fk=kwh(fms,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH; return {lms,fms,lk,fk,tk,cost}; }
 
-// ---------- Tiny “brain”: memory + small talk + math + intents ----------
-const MEM = []; // last few turns
-function remember(user, astra){ MEM.push({user, astra}); if(MEM.length>8) MEM.shift(); }
-
-const JOKES=[
-  "Why did the computer get cold? It forgot to close its Windows.",
-  "Why do programmers prefer dark mode? Because light attracts bugs.",
-  "Parallel lines have so much in common… it’s a shame they’ll never meet."
-];
-const FACTS=[
-  "Honey never spoils — even after thousands of years.",
-  "Octopuses have three hearts and blue blood.",
-  "Bananas are berries, but strawberries aren’t.",
-  "Your phone has more computing power than Apollo’s onboard computers."
-];
-function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-
-function tryMath(s){
-  if(!/\b(what is|calculate|calc|evaluate)\b/.test(s)) return null;
-  const expr = s.replace(/.*?\b(what is|calculate|calc|evaluate)\s*/,'').replace(/[^0-9+\-*/().\s]/g,'').trim();
-  if(!expr) return "Tell me the equation you want me to solve.";
-  try{ const val = Function(`"use strict"; return (${expr})`)(); if(isFinite(val)) return `The answer is ${val}.`; }catch{}
-  return "Hmm, I couldn't compute that one.";
-}
-
-function naturalReply(s){
-  const last = MEM.length ? MEM[MEM.length-1].user : "";
-  const soft = ["Got it.","Okay.","Noted.","Alright.","Sure."];
-  if (last && Math.random()<0.35) return `${pick(soft)} About what you said earlier — "${last}" — I kept that in mind.`;
-  return pick(soft)+" "+s;
-}
-
-function intent(text){
-  let s=(text||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
+// Core brain (simplified for stability)
+function intent(s){
+  s = (s||"").toLowerCase();
   if(!s) return {type:"idle"};
-  const has=w=>s.includes(w), any=(...a)=>a.some(w=>has(w));
-
-  // Small talk first
-  if(any("how are you","how r u","how are u")) return {type:"say", text: pick([
-    "I'm feeling great and ready to help. How are you?",
-    "All good here — calm, focused, and listening.",
-    "Doing well! Thanks for asking."
-  ])};
-  if(any("your name","who are you")) return {type:"say", text:"I'm Astra — your friendly room assistant."};
-  if(any("what can you do","help","capabilities")) return {type:"say", text:"I can chat naturally, control light and fan, report temperature, humidity and people count, tell jokes, do quick math, and summarize usage with energy estimates."};
-  if(any("thank you","thanks")) return {type:"say", text: pick(["Anytime!","You're welcome.","Happy to help."])};
-  if(any("good morning","good afternoon","good evening","good night")){
-    const m = s.match(/good (morning|afternoon|evening|night)/i);
-    return {type:"say", text:`Good ${m?m[1]:"day"}, Achal.`};
-  }
-  if(any("tell me a joke","joke","make me laugh")) return {type:"say", text: pick(JOKES)};
-  if(any("fun fact","tell me a fact","fact")) return {type:"say", text: pick(FACTS)};
-  const mathAns = tryMath(s); if(mathAns) return {type:"say", text: mathAns};
-
-  // Info
-  if(any("what is the time","what's the time","whats the time","time now","tell time","time")) return {type:"time"};
-  if(any("temperature","temp","how hot")) return {type:"temp"};
-  if(any("humidity","how humid")) return {type:"hum"};
-  if(any("how many people","people inside","people count","people")) return {type:"people"};
-
-  // Device control — both word orders
-  if( (has("light")&&has("on")) || any("turn on light","switch on light","light on","turn the light on") ){ if(!has("off")) return {type:"light",val:1}; }
-  if( (has("light")&&has("off"))|| any("turn off light","switch off light","light off","turn the light off") ) return {type:"light",val:0};
-  if( (has("fan")&&has("on"))   || any("turn on fan","switch on fan","fan on","turn the fan on") ){ if(!has("off")) return {type:"fan",val:1}; }
-  if( (has("fan")&&has("off"))  || any("turn off fan","switch off fan","fan off","turn the fan off") ) return {type:"fan",val:0};
-
-  // Reports / usage
-  if(any("report","summary","status")) return {type:"report"};
-  if(any("fan usage","fan count","how many times fan")) return {type:"say", text:`The fan ran ${counters.fan_on_events} times.`};
-  if(any("light usage","light count","how many times light")) return {type:"say", text:`The light ran ${counters.light_on_events} times.`};
-  if(any("energy","power","consumption","units")) {
-    const u=usage(); return {type:"say", text:`Energy so far is ${u.tk.toFixed(3)} kilowatt hours, around rupees ${u.cost.toFixed(2)}.`};
-  }
-
-  if(any("stop","exit","quit")) return {type:"stop"};
-
-  // Friendly fallback
-  return {type:"say", text: naturalReply(s)};
+  if(s.includes("light on")) return {type:"light",val:1};
+  if(s.includes("light off")) return {type:"light",val:0};
+  if(s.includes("fan on")) return {type:"fan",val:1};
+  if(s.includes("fan off")) return {type:"fan",val:0};
+  if(s.includes("report")) return {type:"report"};
+  if(s.includes("temperature")||s.includes("temp")) return {type:"temp"};
+  if(s.includes("humidity")) return {type:"hum"};
+  if(s.includes("how are you")) return {type:"say", text:"I'm feeling great and ready to help, Achal."};
+  if(s.includes("your name")) return {type:"say", text:"I'm Astra, your voice assistant."};
+  if(s.includes("joke")) return {type:"say", text:"Why did the computer get cold? It left its Windows open!"};
+  return {type:"say", text:"Got it!"};
 }
 
-// ---------- Actions ----------
 function setDevice(dev,val){
   if(dev==='light'){ if(val && !cache.light){ counters.light_on_events++; startRun('light'); }
                      if(!val && cache.light){ finishRun('light'); } }
-  if(dev==='fan'){   if(val && !cache.fan){   counters.fan_on_events++;   startRun('fan'); }
-                     if(!val && cache.fan){   finishRun('fan'); } }
+  if(dev==='fan'){   if(val && !cache.fan){ counters.fan_on_events++; startRun('fan'); }
+                     if(!val && cache.fan){ finishRun('fan'); } }
   cache[dev]=val?1:0;
   counters.cmds++;
   refreshTiles();
-  return val?`Turning on the ${dev}.`:`Turning the ${dev} off.`;
+  return val?`Turning on the ${dev}.`:`Turning off the ${dev}.`;
 }
+
 function report(){
   const u=usage();
   return [
     "Here’s the room status.",
     `Light ${cache.light?'on':'off'} — ${counters.light_on_events} times, ${fmtMs(u.lms)} total.`,
     `Fan ${cache.fan?'on':'off'} — ${counters.fan_on_events} times, ${fmtMs(u.fms)} total.`,
-    `People ${cache.people} (entries +${counters.people_entries}).`,
+    `People in room: ${cache.people}.`,
     `Temperature ${cache.temp.toFixed(1)}°C, humidity ${cache.hum.toFixed(1)}%.`,
-    `Energy about ${u.tk.toFixed(3)} kWh (₹${u.cost.toFixed(2)}).`
+    `Energy usage ${u.tk.toFixed(3)} kilowatt hours (₹${u.cost.toFixed(2)}).`
   ].join(" ");
 }
 
-async function handleIntent(res, raw){
+async function handleIntent(res){
   switch(res.type){
-    case "idle": return;
-    case "say": remember(raw, res.text); return speak(res.text);
-    case "time": { const t = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); const msg=`It's ${t}.`; remember(raw,msg); return speak(msg); }
-    case "temp": { const msg=`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`; remember(raw,msg); return speak(msg); }
-    case "hum":  { const msg=`Humidity is ${cache.hum.toFixed(1)} percent.`; remember(raw,msg); return speak(msg); }
-    case "people": { const msg=`People in room: ${cache.people}.`; remember(raw,msg); return speak(msg); }
-    case "light": { const msg = setDevice("light", res.val); remember(raw,msg); return speak(msg); }
-    case "fan":   { const msg = setDevice("fan", res.val); remember(raw,msg); return speak(msg); }
-    case "report": { const msg = report(); remember(raw,msg); return speak(msg); }
-    case "stop": listening=false; try{ rec&&rec.stop(); }catch{}; return speak("Okay, I’ll be quiet now.");
+    case "say": return speak(res.text);
+    case "light": return speak(setDevice("light",res.val));
+    case "fan": return speak(setDevice("fan",res.val));
+    case "temp": return speak(`Temperature is ${cache.temp.toFixed(1)}°C.`);
+    case "hum": return speak(`Humidity is ${cache.hum.toFixed(1)}%.`);
+    case "report": return speak(report());
   }
 }
 
-// ---------- STT (Always-on) with TTS guard ----------
+// Speech Recognition
 function getRecognizer(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert("Your browser doesn't support SpeechRecognition. Use Chrome on Android with HTTPS."); return null; }
-  const r=new SR(); r.lang='en-IN'; r.continuous=true; r.interimResults=false; r.maxAlternatives=1;
+  const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert("SpeechRecognition not supported. Use Chrome on Android."); return null; }
+  const r = new SR(); r.lang='en-IN'; r.continuous=true; r.interimResults=false;
   r.onstart=()=>{ setStatus("Listening…",true); micBtn.classList.add('live'); };
   r.onend=()=>{ setStatus("Idle",false); micBtn.classList.remove('live'); if(listening && !ttsActive){ try{ r.start(); }catch{} } };
   r.onerror=e=>{ log("STT error: "+(e.error||'unknown')); };
-  r.onresult = async e => {
-  // Allow interrupting Astra mid-speech
-  if (ttsActive) { try { speechSynthesis.cancel(); } catch {} ttsActive = false; }
-
-  const t = e.results[e.resultIndex][0].transcript.trim();
-  if (!t || t === lastProcessed) return;
-
-  lastProcessed = t;
-  log("You: " + t);
-
-  const res = intent(t);
-  await handleIntent(res, t);
-};
-
+  r.onresult=async e=>{
+    if(ttsActive) return;
+    const t = e.results[e.resultIndex][0].transcript.trim();
+    if(!t || t===lastProcessed) return;
+    lastProcessed = t;
+    log("You: "+t);
+    await handleIntent(intent(t));
+  };
   return r;
 }
+
 function startListening(){ if(listening) return; initVoice(); const r=getRecognizer(); if(!r) return; rec=r; listening=true; speechSynthesis.cancel(); try{ rec.start(); }catch{} }
 function stopListening(){ listening=false; try{ rec&&rec.stop(); }catch{} }
 
 // Buttons
-document.getElementById('btnLightOn').onclick=()=>handleIntent({type:"light",val:1}, "button: light on");
-document.getElementById('btnLightOff').onclick=()=>handleIntent({type:"light",val:0}, "button: light off");
-document.getElementById('btnFanOn').onclick=()=>handleIntent({type:"fan",val:1}, "button: fan on");
-document.getElementById('btnFanOff').onclick=()=>handleIntent({type:"fan",val:0}, "button: fan off");
-document.getElementById('btnReport').onclick=()=>handleIntent({type:"report"}, "button: report");
-document.getElementById('btnReset').onclick=()=>{ finishRun('light'); finishRun('fan');
-  counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0;
-  refreshTiles(); speak("Done. I’ve reset the counters."); };
+document.getElementById('btnLightOn').onclick=()=>handleIntent({type:"light",val:1});
+document.getElementById('btnLightOff').onclick=()=>handleIntent({type:"light",val:0});
+document.getElementById('btnFanOn').onclick=()=>handleIntent({type:"fan",val:1});
+document.getElementById('btnFanOff').onclick=()=>handleIntent({type:"fan",val:0});
+document.getElementById('btnReport').onclick=()=>handleIntent({type:"report"});
 
-// Mic
 micBtn.addEventListener('click', ()=> listening?stopListening():startListening());
 
-// First paint
-setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, I'm ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
+// Startup
+setTimeout(()=>{ refreshTiles(); initVoice(); speak("Hi Achal, Astra is ready. Say 'turn on the light' or 'report'."); }, 350);
 </script>
 </body>
 </html>
+
 
 
 
