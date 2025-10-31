@@ -122,6 +122,27 @@ function refreshTiles(){
   kHum.textContent   = cache.hum.toFixed(1);
   kCmds.textContent  = counters.cmds;
 }
+  // 🔄 Sync Astra state with Firebase
+function updateFirebase() {
+  set(ref(db, "devices/env"), {
+    light: cache.light,
+    fan: cache.fan,
+    temp: cache.temp,
+    hum: cache.hum,
+    people: cache.people,
+    lastUpdated: new Date().toISOString()
+  });
+}
+
+// 🔍 Listen for real-time updates from Firebase
+onValue(ref(db, "devices/env"), (snapshot) => {
+  const data = snapshot.val();
+  if (!data) return;
+  cache = { ...cache, ...data };
+  refreshTiles();
+  log("📡 Synced live data from Firebase");
+});
+
 
 function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
 function log(t){ const p=document.createElement('p'); p.textContent=t; logBox.appendChild(p); logBox.scrollTop=logBox.scrollHeight; }
@@ -268,13 +289,14 @@ function intent(text){
   return {type:"say", text: naturalReply(s)};
 }
 
-/* ---------- Actions ---------- */
 function setDevice(dev,val){
-  if(dev==='light'){ if(val && !cache.light){ counters.light_on_events++; startRun('light'); } if(!val && cache.light){ finishRun('light'); } }
-  if(dev==='fan'){   if(val && !cache.fan){   counters.fan_on_events++;   startRun('fan'); } if(!val && cache.fan){   finishRun('fan'); } }
-  cache[dev]=val?1:0; counters.cmds++; refreshTiles();
-  return val?`Turning on the ${dev}.`:`Turning the ${dev} off.`;
+  cache[dev] = val ? 1 : 0;
+  counters.cmds++;
+  refreshTiles();
+  updateFirebase();  // 🔄 send to Firebase
+  return val ? `Turning on the ${dev}.` : `Turning the ${dev} off.`;
 }
+
 function report(){
   const u=usage();
   return [
@@ -371,6 +393,7 @@ window.addEventListener('load', ()=>{ setupMic(); });
 
 </body>
 </html>
+
 
 
 
