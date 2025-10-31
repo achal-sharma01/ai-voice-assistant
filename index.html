@@ -73,6 +73,28 @@
     <p class="muted">Say: “turn the light on”, “turn off the fan”, “what’s the time”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
   </div>
 </div>
+  <!-- 🔥 Firebase Setup -->
+<script type="module">
+  // Import Firebase SDKs
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+  import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBOY2RAbZrxdB3Hx1gzueviq5dafgtjUM",
+    authDomain: "ai-voice-assistant-54a0d.firebaseapp.com",
+    databaseURL: "https://ai-voice-assistant-54a0d-default-rtdb.firebaseio.com",
+    projectId: "ai-voice-assistant-54a0d",
+    storageBucket: "ai-voice-assistant-54a0d.appspot.com",
+    messagingSenderId: "108609981627",
+    appId: "1:108609981627:web:7df4758f224bb387b2ed9e",
+    measurementId: "G-MYWV0WX4XG"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+</script>
+
 <script>
 /* === ASTRA — Single, stable mic + safe TTS (clean build) === */
 
@@ -349,6 +371,7 @@ window.addEventListener('load', ()=>{ setupMic(); });
 
 </body>
 </html>
+
 
 
 
