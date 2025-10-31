@@ -12,7 +12,6 @@
   .muted{color:#94a3b8;font-size:13px;margin:0 0 12px}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .pill{border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 10px;font-size:12px;color:#94a3b8}
-
   .mic{display:block;width:120px;height:120px;margin:12px auto;border-radius:50%;border:none;
        background:radial-gradient(60% 60% at 50% 30%,rgba(14,165,233,.25),transparent);
        box-shadow:inset 0 0 0 2px rgba(14,165,233,.35),0 10px 30px rgba(14,165,233,.25);
@@ -20,61 +19,17 @@
   .mic.live{box-shadow:inset 0 0 0 3px rgba(34,197,94,.6),0 10px 30px rgba(34,197,94,.35)}
   .status{display:flex;gap:8px;justify-content:center;color:#94a3b8;font-size:13px}
   .dot{width:10px;height:10px;border-radius:50%;background:#ef4444}.dot.ok{background:#22c55e}
-
   .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
   .tile{background:#0b1220;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px}
   .tile h3{margin:0 0 6px;font-size:12px;color:#94a3b8}
   .tile p{margin:0;font-size:18px}
-
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
   .btn{border:1px solid rgba(255,255,255,.2);background:#0b1220;color:#e5e7eb;border-radius:10px;padding:10px 12px}
-
   .log{height:220px;overflow:auto;background:#0b1220;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;margin-top:12px}
   .log p{margin:6px 0;font-size:13px}
 </style>
-</head>
-<body>
-  <audio id="ttsAudio" preload="auto"></audio>
-<div class="wrap">
-  <div class="card">
-    <h1>🤖 Astra — Emergency Stable Build + Dashboard</h1>
-    <p class="muted">Always-on listening with TTS-mute (no feedback loop). Voice commands, manual controls, report, and live tiles (Temp, Humidity, People, Light, Fan, Commands).</p>
 
-    <div class="row">
-      <span class="pill">Mode: <b>Always-on</b></span>
-      <span class="pill">Lang: <b>en-IN</b></span>
-      <span class="pill">Simulator: <b>ON</b></span>
-    </div>
-
-    <button id="micBtn" class="mic" title="Start/Stop">🎤</button>
-    <div class="status"><span id="dot" class="dot"></span><span id="status">Idle</span></div>
-
-    <!-- ⬇️ NEW DASHBOARD TILES -->
-    <div class="kpis">
-      <div class="tile"><h3>Light</h3><p id="kLight">OFF</p></div>
-      <div class="tile"><h3>Fan</h3><p id="kFan">OFF</p></div>
-      <div class="tile"><h3>People</h3><p id="kPeople">1</p></div>
-      <div class="tile"><h3>Temp (°C)</h3><p id="kTemp">27.0</p></div>
-      <div class="tile"><h3>Humidity (%)</h3><p id="kHum">48.0</p></div>
-      <div class="tile"><h3>Commands</h3><p id="kCmds">0</p></div>
-    </div>
-
-    <!-- Manual controls you already had -->
-    <div class="grid">
-      <button class="btn" id="btnLightOn">Light ON</button>
-      <button class="btn" id="btnLightOff">Light OFF</button>
-      <button class="btn" id="btnFanOn">Fan ON</button>
-      <button class="btn" id="btnFanOff">Fan OFF</button>
-      <button class="btn" id="btnReport">Speak Report</button>
-      <button class="btn" id="btnReset">Reset Counters</button>
-    </div>
-
-    <div id="log" class="log" aria-live="polite"></div>
-    <p class="muted">Say: “turn the light on”, “turn off the fan”, “what’s the time”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
-  </div>
-</div>
-  <!-- 🔥 Firebase Setup -->
-<!-- Firebase compat (works in non-module scripts) -->
+<!-- ✅ Firebase compat (no modules) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
@@ -91,10 +46,54 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 </script>
+</head>
 
+<body>
+  <audio id="ttsAudio" preload="auto"></audio>
+<div class="wrap">
+  <div class="card">
+    <h1>🤖 Astra — Emergency Stable Build + Dashboard</h1>
+    <p class="muted">Always-on listening with TTS-mute (no feedback loop). Voice commands, manual controls, report, and live tiles.</p>
+
+    <div class="row">
+      <span class="pill">Mode: <b>Always-on</b></span>
+      <span class="pill">Lang: <b>en-IN</b></span>
+      <span class="pill">Simulator: <b>ON</b></span>
+    </div>
+
+    <button id="micBtn" class="mic" title="Start/Stop">🎤</button>
+    <div class="status"><span id="dot" class="dot"></span><span id="status">Idle</span></div>
+
+    <div class="kpis">
+      <div class="tile"><h3>Light</h3><p id="kLight">OFF</p></div>
+      <div class="tile"><h3>Fan</h3><p id="kFan">OFF</p></div>
+      <div class="tile"><h3>People</h3><p id="kPeople">1</p></div>
+      <div class="tile"><h3>Temp (°C)</h3><p id="kTemp">27.0</p></div>
+      <div class="tile"><h3>Humidity (%)</h3><p id="kHum">48.0</p></div>
+      <div class="tile"><h3>Commands</h3><p id="kCmds">0</p></div>
+    </div>
+
+    <div class="grid">
+      <button class="btn" id="btnLightOn">Light ON</button>
+      <button class="btn" id="btnLightOff">Light OFF</button>
+      <button class="btn" id="btnFanOn">Fan ON</button>
+      <button class="btn" id="btnFanOff">Fan OFF</button>
+      <button class="btn" id="btnReport">Speak Report</button>
+      <button class="btn" id="btnReset">Reset Counters</button>
+    </div>
+
+    <div id="log" class="log" aria-live="polite"></div>
+    <p class="muted">Say: “turn the light on”, “turn off the fan”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
+  </div>
+</div>
 
 <script>
-/* === ASTRA — Single, stable mic + safe TTS (clean build) === */
+/* === ASTRA — Stable build (Firebase compat, mic, TTS) === */
+window.addEventListener('error', e => {
+  const logBox=document.getElementById('log'); if(!logBox) return;
+  const p=document.createElement('p'); p.textContent = "❌ Script error: " + (e.message||e.filename||'unknown');
+  logBox.appendChild(p);
+});
 
 let listening=false, rec=null, ttsActive=false, lastProcessed="";
 const logBox=document.getElementById('log'), dot=document.getElementById('dot'),
@@ -120,40 +119,36 @@ function refreshTiles(){
   kHum.textContent   = cache.hum.toFixed(1);
   kCmds.textContent  = counters.cmds;
 }
-  // 🔄 Sync Astra state with Firebase
-function updateFirebase() {
-  db.ref("devices/env").set({
-    light: cache.light,
-    fan: cache.fan,
-    temp: cache.temp,
-    hum: cache.hum,
-    people: cache.people,
-    lastUpdated: new Date().toISOString()
-  });
-}
-  // 🔍 Listen for real-time updates from Firebase
-db.ref("devices/env").on('value', (snapshot) => {
-  const data = snapshot.val();
-  if (!data) return;
-  cache = { ...cache, ...data }; // merge the new values
-  refreshTiles(); // update the dashboard
-  log("📡 Synced live data from Firebase");
-});
-
-// 🔍 Listen for real-time updates from Firebase
-onValue(ref(db, "devices/env"), (snapshot) => {
-  const data = snapshot.val();
-  if (!data) return;
-  cache = { ...cache, ...data };
-  refreshTiles();
-  log("📡 Synced live data from Firebase");
-});
-
 
 function setStatus(t,ok){ statusEl.textContent=t; dot.classList.toggle('ok', !!ok); }
 function log(t){ const p=document.createElement('p'); p.textContent=t; logBox.appendChild(p); logBox.scrollTop=logBox.scrollHeight; }
 
-/* ---------- Voice lock (clear English) ---------- */
+/* ---------- Firebase sync (compat) ---------- */
+function updateFirebase() {
+  try{
+    firebase.database().ref("devices/env").set({
+      light: cache.light,
+      fan: cache.fan,
+      temp: cache.temp,
+      hum: cache.hum,
+      people: cache.people,
+      lastUpdated: new Date().toISOString()
+    });
+  }catch(e){ log("⚠️ Firebase set error: "+e.message); }
+}
+
+// live listener
+try{
+  firebase.database().ref("devices/env").on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+    cache = { ...cache, ...data };
+    refreshTiles();
+    log("📡 Synced live data from Firebase");
+  });
+}catch(e){ log("⚠️ Firebase on() error: "+e.message); }
+
+/* ---------- Voice lock ---------- */
 let preferredVoice=null;
 function lockVoice(){
   const voices=speechSynthesis.getVoices()||[];
@@ -165,49 +160,28 @@ function lockVoice(){
 speechSynthesis.onvoiceschanged=()=>lockVoice();
 setTimeout(()=>{ try{ lockVoice(); }catch{} }, 500);
 
-/* ---------- Humanize + tiny “thinking” pause ---------- */
+/* ---------- TTS ---------- */
+const wait = ms => new Promise(r=>setTimeout(r,ms));
 function humanize(text){
-  let s=(text||"")
-    .replace(/\bis not\b/gi,"isn't")
-    .replace(/\bI am\b/gi,"I'm")
-    .replace(/\bdo not\b/gi,"don't")
-    .replace(/\bwe will\b/gi,"we'll");
+  let s=(text||"").replace(/\bis not\b/gi,"isn't").replace(/\bI am\b/gi,"I'm").replace(/\bdo not\b/gi,"don't").replace(/\bwe will\b/gi,"we'll");
   return s.replace(/, /g,", … ");
 }
-const wait = ms => new Promise(r=>setTimeout(r,ms));
-
-/* ---------- Safe TTS: never collides with mic ---------- */
 async function speak(text){
   if(!text) return;
   try{ speechSynthesis.cancel(); }catch{}
-  ttsActive=true;
-  setStatus("Thinking…", false);
-  log("Astra: "+text);
-
-  // stop mic before speaking
+  ttsActive=true; setStatus("Thinking…", false); log("Astra: "+text);
   try{ rec && rec.stop(); }catch{}
-
-  // small pause so Chrome releases audio
   await wait(350);
-
   const u = new SpeechSynthesisUtterance(humanize(text));
-  u.lang = 'en-US';                         // force stable language
-  if(preferredVoice){ try{ u.voice=preferredVoice; u.lang=preferredVoice.lang||'en-US'; }catch{} }
-  u.rate = 0.97; u.pitch = 1.05; u.volume = 1.0;
-
+  u.lang='en-US'; if(preferredVoice){ try{ u.voice=preferredVoice; u.lang=preferredVoice.lang||'en-US'; }catch{} }
+  u.rate=0.97; u.pitch=1.05; u.volume=1.0;
   u.onstart=()=> setStatus("Speaking…", false);
-  u.onend=()=>{ 
-    ttsActive=false; 
-    setStatus("Listening…", true);
-    // restart mic after a short cool-down
-    setTimeout(()=>{ if(listening && rec){ try{ rec.start(); log("🎤 Mic restarted after speaking."); }catch(e){ log("⚠️ Mic restart error: "+e.message); } } }, 900);
-  };
+  u.onend=()=>{ ttsActive=false; setStatus("Listening…", true); setTimeout(()=>{ if(listening&&rec){ try{ rec.start(); log("🎤 Mic restarted after speaking."); }catch(e){ log("⚠️ Mic restart error: "+e.message); } } }, 900); };
   u.onerror=e=>{ ttsActive=false; log("TTS error: "+(e.error||'unknown')); setStatus("Idle", false); };
-
   try{ speechSynthesis.speak(u); }catch(e){ log("Speak error: "+e.message); ttsActive=false; }
 }
 
-/* ---------- Simulator (until hardware plugs in) ---------- */
+/* ---------- Simulator ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
   cache.hum =Math.max(30,Math.min(70,cache.hum +(Math.random()*0.8-0.4)));
@@ -222,75 +196,40 @@ setInterval(()=>{
 /* ---------- Energy helpers ---------- */
 const nowMs=()=>performance.now(), kwh=(ms,w)=>(ms/3600000)*(w/1000);
 function startRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt==null)_lightOnAt=t; if(what==='fan'&&_fanOnAt==null)_fanOnAt=t;}
-function finishRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt!=null){counters.light_ms+=t-_lightOnAt;_lightOnAt=null;} if(what==='fan'&&_fanOnAt!=null){counters.fan_ms+=t-_fanOnAt;_fanOnAt=null;}}
+function finishRun(what){const t=nowMs(); if(what==='light'&&_lightOnAt!=null){counters.light_ms+=t-_lightOnAt;_lightOnAt=null;} if(what==='fan'&&_fanOnAt!=null){counters.fan_ms+=t-_fanOnAt;_fanOnAt=null;} }
 const fmtMs=ms=>{const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000); return (h?`${h}h `:"")+`${m}m`;};
 function usage(){ const t=nowMs(); const lms=counters.light_ms+(_lightOnAt? t-_lightOnAt:0); const fms=counters.fan_ms+(_fanOnAt? t-_fanOnAt:0);
   const lk=kwh(lms,LIGHT_WATTS), fk=kwh(fms,FAN_WATTS), tk=lk+fk, cost=tk*INR_PER_KWH; return {lms,fms,lk,fk,tk,cost}; }
 
-/* ---------- Brain: small talk + intents ---------- */
+/* ---------- Brain ---------- */
 const MEM=[]; function remember(user,astra){ MEM.push({user,astra}); if(MEM.length>8) MEM.shift(); }
-const JOKES=[
- "Why did the computer get cold? It forgot to close its Windows.",
- "Why do programmers prefer dark mode? Because light attracts bugs.",
- "Parallel lines have so much in common… it’s a shame they’ll never meet."
-];
-const FACTS=[
- "Honey never spoils — even after thousands of years.",
- "Octopuses have three hearts and blue blood.",
- "Bananas are berries, but strawberries aren’t.",
- "Your phone has more computing power than Apollo’s Apollo Guidance Computer."
-];
+const JOKES=["Why did the computer get cold? It forgot to close its Windows.","Why do programmers prefer dark mode? Because light attracts bugs.","Parallel lines have so much in common… it’s a shame they’ll never meet."];
+const FACTS=["Honey never spoils — even after thousands of years.","Octopuses have three hearts and blue blood.","Bananas are berries, but strawberries aren’t.","Your phone has more computing power than Apollo’s Apollo Guidance Computer."];
 function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-function tryMath(s){
-  if(!/\b(what is|calculate|calc|evaluate)\b/i.test(s)) return null;
+function tryMath(s){ if(!/\b(what is|calculate|calc|evaluate)\b/i.test(s)) return null;
   const expr=s.replace(/.*?\b(what is|calculate|calc|evaluate)\s*/i,'').replace(/[^0-9+\-*/().\s]/g,'').trim();
-  if(!expr) return "Tell me the equation you want me to solve.";
-  try{ const val=Function(`"use strict";return(${expr})`)(); if(isFinite(val)) return `The answer is ${val}.`; }catch{}
-  return "Hmm, I couldn't compute that one.";
-}
-function naturalReply(s){
-  const last = MEM.length ? MEM[MEM.length-1].user : "";
-  const soft = ["Sure.","Got it.","Okay.","Alright.","Happy to help."];
-  if(last && Math.random()<0.35) return `${pick(soft)} About "${last}", I kept that in mind.`;
-  return pick(soft)+" "+s;
-}
+  if(!expr) return "Tell me the equation you want me to solve."; try{ const val=Function(`"use strict";return(${expr})`)(); if(isFinite(val)) return `The answer is ${val}.`; }catch{} return "Hmm, I couldn't compute that one."; }
+function naturalReply(s){ const last = MEM.length ? MEM[MEM.length-1].user : ""; const soft = ["Sure.","Got it.","Okay.","Alright.","Happy to help."]; if(last && Math.random()<0.35) return `${pick(soft)} About "${last}", I kept that in mind.`; return pick(soft)+" "+s; }
 function intent(text){
   let s=(text||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
-  if(!s) return {type:"idle"};
-  const has=w=>s.includes(w), any=(...a)=>a.some(w=>has(w));
-
-  // Small talk
-  if(any("how are you","how r u","how are u")) return {type:"say", text: pick([
-    "I'm feeling great and ready to help. How are you?",
-    "All good here — calm, focused, and listening.",
-    "Doing well! Thanks for asking."
-  ])};
+  if(!s) return {type:"idle"}; const has=w=>s.includes(w), any=(...a)=>a.some(w=>has(w));
+  if(any("how are you","how r u","how are u")) return {type:"say", text: pick(["I'm feeling great and ready to help. How are you?","All good here — calm, focused, and listening.","Doing well! Thanks for asking."])};
   if(any("your name","who are you")) return {type:"say", text:"I'm Astra — your friendly room assistant."};
   if(any("what can you do","help","capabilities")) return {type:"say", text:"I can chat naturally, control light and fan, report temperature, humidity and people count, tell jokes, do quick math, and summarize usage with energy estimates."};
   if(any("thank you","thanks")) return {type:"say", text: pick(["Anytime!","You're welcome.","Happy to help."])};
-  if(any("good morning","good afternoon","good evening","good night")){
-    const m=s.match(/good (morning|afternoon|evening|night)/i);
-    return {type:"say", text:`Good ${m?m[1]:"day"}, Achal.`};
-  }
+  if(any("good morning","good afternoon","good evening","good night")){ const m=s.match(/good (morning|afternoon|evening|night)/i); return {type:"say", text:`Good ${m?m[1]:"day"}, Achal.`}; }
   if(any("tell me a joke","joke","make me laugh")) return {type:"say", text: pick(JOKES)};
   if(any("fun fact","tell me a fact","fact")) return {type:"say", text: pick(FACTS)};
   const mathAns=tryMath(s); if(mathAns) return {type:"say", text: mathAns};
-
-  // Info
   if(any("what is the time","what's the time","whats the time","time now","tell time","time")) return {type:"time"};
   if(any("temperature","temp","how hot")) return {type:"temp"};
   if(any("humidity","how humid")) return {type:"hum"};
   if(any("how many people","people inside","people count","people")) return {type:"people"};
-
-  // Device control
   if( (s.includes("light")&&s.includes("on")) || any("turn on light","switch on light","light on","turn the light on") ){ if(!s.includes("off")) return {type:"light",val:1}; }
   if( (s.includes("light")&&s.includes("off"))|| any("turn off light","switch off light","light off","turn the light off") ) return {type:"light",val:0};
   if( (s.includes("fan")&&s.includes("on"))   || any("turn on fan","switch on fan","fan on","turn the fan on") ){ if(!s.includes("off")) return {type:"fan",val:1}; }
   if( (s.includes("fan")&&s.includes("off"))  || any("turn off fan","switch off fan","fan off","turn the fan off") ) return {type:"fan",val:0};
-
-  // Reports
   if(any("report","summary","status")) return {type:"report"};
-
   if(any("stop","exit","quit")) return {type:"stop"};
   return {type:"say", text: naturalReply(s)};
 }
@@ -299,7 +238,7 @@ function setDevice(dev,val){
   cache[dev] = val ? 1 : 0;
   counters.cmds++;
   refreshTiles();
-  updateFirebase();  // 🔄 send to Firebase
+  updateFirebase();
   return val ? `Turning on the ${dev}.` : `Turning the ${dev} off.`;
 }
 
@@ -314,6 +253,7 @@ function report(){
     `Energy about ${u.tk.toFixed(3)} kWh (₹${u.cost.toFixed(2)}).`
   ].join(" ");
 }
+
 async function handleIntent(res, raw){
   switch(res.type){
     case "idle": return;
@@ -329,18 +269,17 @@ async function handleIntent(res, raw){
   }
 }
 
-/* ---------- Single SpeechRecognition (no duplicates) ---------- */
+/* ---------- Mic (single recognizer) ---------- */
 function setupMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ alert("Speech recognition not supported. Use Chrome on HTTPS."); return; }
   rec=new SR();
   rec.lang='en-IN'; rec.continuous=true; rec.interimResults=false; rec.maxAlternatives=1;
-
   rec.onstart=()=>{ log("🎤 Mic started."); setStatus("Listening…",true); micBtn.classList.add('live'); };
   rec.onend=()=>{ log("🛑 Mic ended."); micBtn.classList.remove('live'); if(listening && !ttsActive){ setTimeout(()=>{ try{ rec.start(); }catch{} }, 600); } else { setStatus("Idle",false); } };
   rec.onerror=e=>{ log("❌ STT error: "+(e.error||'unknown')); if(e.error==="not-allowed"||e.error==="service-not-allowed"){ setStatus("Mic permission blocked.", false);} };
   rec.onresult=async e=>{
-    if(ttsActive) return; // guard while speaking
+    if(ttsActive) return;
     const t=e.results[e.resultIndex][0].transcript.trim();
     if(!t || t===lastProcessed) return;
     lastProcessed=t; log("You: "+t);
@@ -348,75 +287,33 @@ function setupMic(){
     await handleIntent(res, t);
   };
 }
-
 function startMic(){
   if(ttsActive) return;
   if(!rec) setupMic();
   if(!rec) return;
-  // Ensure permission; then start
   const md = navigator.mediaDevices;
   if(md && md.getUserMedia){
-    md.getUserMedia({audio:true}).then(stream=>{
-      stream.getTracks().forEach(t=>t.stop()); // we only needed permission
-      listening=true;
-      try{ rec.start(); }catch(e){ log("Start error: "+e.message); }
-    }).catch(err=>{
-      log("🚫 Mic permission denied: "+err.message);
-      setStatus("Mic permission denied", false);
-    });
-  } else {
-    listening=true;
-    try{ rec.start(); }catch(e){ log("Start error: "+e.message); }
-  }
+    md.getUserMedia({audio:true}).then(stream=>{ stream.getTracks().forEach(t=>t.stop()); listening=true; try{ rec.start(); }catch(e){ log("Start error: "+e.message); }})
+    .catch(err=>{ log("🚫 Mic permission denied: "+err.message); setStatus("Mic permission denied", false); });
+  } else { listening=true; try{ rec.start(); }catch(e){ log("Start error: "+e.message); } }
 }
-function stopMic(){
-  listening=false;
-  try{ rec && rec.stop(); }catch{}
-  micBtn.classList.remove('live');
-  setStatus("Idle", false);
-}
+function stopMic(){ listening=false; try{ rec && rec.stop(); }catch{} micBtn.classList.remove('live'); setStatus("Idle", false); }
 
-/* ---------- Manual buttons ---------- */
+/* ---------- Buttons ---------- */
 document.getElementById('btnLightOn').onclick = ()=>handleIntent({type:"light",val:1}, "button: light on");
 document.getElementById('btnLightOff').onclick= ()=>handleIntent({type:"light",val:0}, "button: light off");
 document.getElementById('btnFanOn').onclick   = ()=>handleIntent({type:"fan",val:1}, "button: fan on");
 document.getElementById('btnFanOff').onclick  = ()=>handleIntent({type:"fan",val:0}, "button: fan off");
 document.getElementById('btnReport').onclick  = ()=>handleIntent({type:"report"}, "button: report");
 const btnReset=document.getElementById('btnReset');
-if(btnReset){
-  btnReset.onclick=()=>{ finishRun('light'); finishRun('fan'); counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0; refreshTiles(); speak("Done. I’ve reset the counters."); };
-}
+if(btnReset){ btnReset.onclick=()=>{ finishRun('light'); finishRun('fan'); counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0; refreshTiles(); speak("Done. I’ve reset the counters."); }; }
 
-/* ---------- Single mic toggle handler ---------- */
+/* ---------- Mic toggle ---------- */
 micBtn.addEventListener('click', ()=>{ if(!listening) startMic(); else stopMic(); });
 
 /* ---------- First paint ---------- */
 setTimeout(()=>{ refreshTiles(); lockVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
-
-// Initialize mic once page is loaded
 window.addEventListener('load', ()=>{ setupMic(); });
 </script>
-
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
