@@ -74,11 +74,10 @@
   </div>
 </div>
   <!-- 🔥 Firebase Setup -->
-<script type="module">
-  // Import Firebase SDKs
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-  import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
-
+<!-- Firebase compat (works in non-module scripts) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
   const firebaseConfig = {
     apiKey: "AIzaSyBOY2RAbZrxdB3Hx1gzueviq5dafgtjUM",
     authDomain: "ai-voice-assistant-54a0d.firebaseapp.com",
@@ -89,11 +88,10 @@
     appId: "1:108609981627:web:7df4758f224bb387b2ed9e",
     measurementId: "G-MYWV0WX4XG"
   };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 </script>
+
 
 <script>
 /* === ASTRA — Single, stable mic + safe TTS (clean build) === */
@@ -124,7 +122,7 @@ function refreshTiles(){
 }
   // 🔄 Sync Astra state with Firebase
 function updateFirebase() {
-  set(ref(db, "devices/env"), {
+  db.ref("devices/env").set({
     light: cache.light,
     fan: cache.fan,
     temp: cache.temp,
@@ -133,6 +131,14 @@ function updateFirebase() {
     lastUpdated: new Date().toISOString()
   });
 }
+  // 🔍 Listen for real-time updates from Firebase
+db.ref("devices/env").on('value', (snapshot) => {
+  const data = snapshot.val();
+  if (!data) return;
+  cache = { ...cache, ...data }; // merge the new values
+  refreshTiles(); // update the dashboard
+  log("📡 Synced live data from Firebase");
+});
 
 // 🔍 Listen for real-time updates from Firebase
 onValue(ref(db, "devices/env"), (snapshot) => {
@@ -393,6 +399,7 @@ window.addEventListener('load', ()=>{ setupMic(); });
 
 </body>
 </html>
+
 
 
 
