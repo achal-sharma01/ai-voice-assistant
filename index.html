@@ -138,7 +138,7 @@ function updateFirebase() {
   }catch(e){ log("⚠️ Firebase set error: "+e.message); }
 }
 
-// 🗓️ YYYY-MM-DD (IST local) for history keys
+// 🗓️ YYYY-MM-DD key (local)
 function todayKey() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -152,33 +152,23 @@ function logEvent(kind, data = {}) {
   try{
     const day = todayKey();
     return firebase.database().ref(`devices/history/${day}/events`).push({
-      kind,                // "light", "fan", "people", ...
-      ...data,             // { val: 1 }, { delta: +1, value: 3 }, etc.
-      ts: firebase.database.ServerValue.TIMESTAMP
+      kind, ...data, ts: firebase.database.ServerValue.TIMESTAMP
     });
-  }catch(e){
-    log("⚠️ logEvent error: " + e.message);
-  }
+  }catch(e){ log("⚠️ logEvent error: " + e.message); }
 }
 
-// live listener
+// Live listener: mirror env → UI and log people deltas
 try{
   firebase.database().ref("devices/env").on('value', (snapshot) => {
     const data = snapshot.val();
     if (!data) return;
-
-    // Detect people delta BEFORE merge
     const prevPeople = cache.people;
-
     cache = { ...cache, ...data };
     refreshTiles();
-
-    // Log people enter/exit if count changed
-    if (typeof prevPeople === 'number' && typeof cache.people === 'number' && prevPeople !== cache.people) {
+    if (typeof prevPeople==='number' && typeof cache.people==='number' && prevPeople!==cache.people) {
       const delta = cache.people - prevPeople;
       logEvent('people', { delta, value: cache.people });
     }
-
     log("📡 Synced live data from Firebase");
   });
 }catch(e){ log("⚠️ Firebase on() error: "+e.message); }
@@ -211,12 +201,14 @@ async function speak(text){
   u.lang='en-US'; if(preferredVoice){ try{ u.voice=preferredVoice; u.lang=preferredVoice.lang||'en-US'; }catch{} }
   u.rate=0.97; u.pitch=1.05; u.volume=1.0;
   u.onstart=()=> setStatus("Speaking…", false);
-  u.onend=()=>{ ttsActive=false; setStatus("Listening…", true); setTimeout(()=>{ if(listening&&rec){ try{ rec.start(); log("🎤 Mic restarted after speaking."); }catch(e){ log("⚠️ Mic restart error: "+e.message); } } }, 900); };
+  u.onend=()=>{ ttsActive=false; setStatus("Listening…", true);
+    setTimeout(()=>{ if(listening&&rec){ try{ rec.start(); log("🎤 Mic restarted after speaking."); }catch(e){ log("⚠️ Mic restart error: "+e.message); } } }, 900);
+  };
   u.onerror=e=>{ ttsActive=false; log("TTS error: "+(e.error||'unknown')); setStatus("Idle", false); };
   try{ speechSynthesis.speak(u); }catch(e){ log("Speak error: "+e.message); ttsActive=false; }
 }
 
-/* ---------- Simulator ---------- */
+/* ---------- Simulator (optional) ---------- */
 setInterval(()=>{
   cache.temp=Math.max(20,Math.min(35,cache.temp+(Math.random()*0.4-0.2)));
   cache.hum =Math.max(30,Math.min(70,cache.hum +(Math.random()*0.8-0.4)));
@@ -248,10 +240,10 @@ function naturalReply(s){ const last = MEM.length ? MEM[MEM.length-1].user : "";
 function intent(text){
   let s=(text||"").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();
   if(!s) return {type:"idle"}; const has=w=>s.includes(w), any=(...a)=>a.some(w=>has(w));
-  if(any("how are you","how r u","how are u")) return {type:"say", text: pick(["I'm feeling great and ready to help. How are you?","All good here — calm, focused, and listening.","Doing well! Thanks for asking."])};
+  if(any("how are you","how r u","how are u")) return {type:"say", text: pick(["I'm feeling great and ready to help. How are you?","All good here — calm, focused, and listening.","Doing well! Thanks for asking."])}; 
   if(any("your name","who are you")) return {type:"say", text:"I'm Astra — your friendly room assistant."};
   if(any("what can you do","help","capabilities")) return {type:"say", text:"I can chat naturally, control light and fan, report temperature, humidity and people count, tell jokes, do quick math, and summarize usage with energy estimates."};
-  if(any("thank you","thanks")) return {type:"say", text: pick(["Anytime!","You're welcome.","Happy to help."])};
+  if(any("thank you","thanks")) return {type:"say", text: pick(["Anytime!","You're welcome.","Happy to help."])}; 
   if(any("good morning","good afternoon","good evening","good night")){ const m=s.match(/good (morning|afternoon|evening|night)/i); return {type:"say", text:`Good ${m?m[1]:"day"}, Achal.`}; }
   if(any("tell me a joke","joke","make me laugh")) return {type:"say", text: pick(JOKES)};
   if(any("fun fact","tell me a fact","fact")) return {type:"say", text: pick(FACTS)};
@@ -333,10 +325,8 @@ function setDevice(dev,val){
   counters.cmds++;
   refreshTiles();
   updateFirebase();
-
-  // log only on change
   if (prev !== cache[dev]) {
-    logEvent(dev, { val: cache[dev] });  // e.g., {kind:"light", val:1}
+    logEvent(dev, { val: cache[dev] });  // history
   }
   return val ? `Turning on the ${dev}.` : `Turning the ${dev} off.`;
 }
@@ -356,19 +346,18 @@ function report(){
 async function handleIntent(res, raw){
   switch(res.type){
     case "idle": return;
-    case "say": remember(raw,res.text); return speak(res.text);
-    case "time": { const t=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); const msg=`It's ${t}.`; remember(raw,msg); return speak(msg); }
-    case "temp": { const msg=`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`; remember(raw,msg); return speak(msg); }
-    case "hum":  { const msg=`Humidity is ${cache.hum.toFixed(1)} percent.`; remember(raw,msg); return speak(msg); }
-    case "people": { const msg=`People in room: ${cache.people}.`; remember(raw,msg); return speak(msg); }
-    case "light": { const msg=setDevice("light",res.val); remember(raw,msg); return speak(msg); }
-    case "fan":   { const msg=setDevice("fan",res.val);   remember(raw,msg); return speak(msg); }
-    case "todayReport": {
-      try { const msg = await buildTodayReportText(); return speak(msg); }
-      catch(e){ return speak("Sorry, I couldn't build today's report right now."); }
-    }
-    case "report":{ const msg=report(); remember(raw,msg); return speak(msg); }
-    case "stop": listening=false; try{ rec&&rec.stop(); }catch{}; return speak("Okay, I’ll be quiet now.");
+    case "say":   remember(raw,res.text); return speak(res.text);
+    case "time": { const t=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); return speak(`It's ${t}.`); }
+    case "temp":  return speak(`Temperature is ${cache.temp.toFixed(1)} degrees Celsius.`);
+    case "hum":   return speak(`Humidity is ${cache.hum.toFixed(1)} percent.`);
+    case "people":return speak(`People in room: ${cache.people}.`);
+    case "light": return speak(setDevice("light",res.val));
+    case "fan":   return speak(setDevice("fan",res.val));
+    case "todayReport":
+      try { return speak(await buildTodayReportText()); }
+      catch{ return speak("Sorry, I couldn't build today's report right now."); }
+    case "report":return speak(report());
+    case "stop":  listening=false; try{ rec&&rec.stop(); }catch{}; return speak("Okay, I’ll be quiet now.");
   }
 }
 
@@ -379,7 +368,8 @@ function setupMic(){
   rec=new SR();
   rec.lang='en-IN'; rec.continuous=true; rec.interimResults=false; rec.maxAlternatives=1;
   rec.onstart=()=>{ log("🎤 Mic started."); setStatus("Listening…",true); micBtn.classList.add('live'); };
-  rec.onend=()=>{ log("🛑 Mic ended."); micBtn.classList.remove('live'); if(listening && !ttsActive){ setTimeout(()=>{ try{ rec.start(); }catch{} }, 600); } else { setStatus("Idle",false); } };
+  rec.onend=()=>{ log("🛑 Mic ended."); micBtn.classList.remove('live');
+    if(listening && !ttsActive){ setTimeout(()=>{ try{ rec.start(); }catch{} }, 600); } else { setStatus("Idle",false); } };
   rec.onerror=e=>{ log("❌ STT error: "+(e.error||'unknown')); if(e.error==="not-allowed"||e.error==="service-not-allowed"){ setStatus("Mic permission blocked.", false);} };
   rec.onresult=async e=>{
     if(ttsActive) return;
@@ -409,7 +399,7 @@ document.getElementById('btnFanOn').onclick   = ()=>handleIntent({type:"fan",val
 document.getElementById('btnFanOff').onclick  = ()=>handleIntent({type:"fan",val:0}, "button: fan off");
 document.getElementById('btnReport').onclick  = ()=>handleIntent({type:"report"}, "button: report");
 document.getElementById('btnTodayReport').onclick = async () => {
-  try { const txt = await buildTodayReportText(); speak(txt); }
+  try { speak(await buildTodayReportText()); }
   catch(e){ log("⚠️ Daily report error: " + e.message); speak("Sorry, I couldn't build the daily report right now."); }
 };
 const btnReset=document.getElementById('btnReset');
