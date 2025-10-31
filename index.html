@@ -53,7 +53,7 @@
 <div class="wrap">
   <div class="card">
     <h1>🤖 Astra — Emergency Stable Build + Dashboard</h1>
-    <p class="muted">Always-on listening with TTS-mute (no feedback loop). Voice commands, manual controls, report, and live tiles.</p>
+    <p class="muted">Always-on listening with TTS-mute (no feedback loop). Voice commands, manual controls, live tiles, and daily history report.</p>
 
     <div class="row">
       <span class="pill">Mode: <b>Always-on</b></span>
@@ -79,16 +79,17 @@
       <button class="btn" id="btnFanOn">Fan ON</button>
       <button class="btn" id="btnFanOff">Fan OFF</button>
       <button class="btn" id="btnReport">Speak Report</button>
+      <button class="btn" id="btnTodayReport">Speak Today Report</button>
       <button class="btn" id="btnReset">Reset Counters</button>
     </div>
 
     <div id="log" class="log" aria-live="polite"></div>
-    <p class="muted">Say: “turn the light on”, “turn off the fan”, “temperature”, “humidity”, “people”, “report”, “stop”.</p>
+    <p class="muted">Say: “turn the light on”, “turn off the fan”, “temperature”, “humidity”, “people”, “report”, “today report”, “stop”.</p>
   </div>
 </div>
 
 <script>
-/* === ASTRA — Stable build (Firebase compat, mic, TTS) === */
+/* === ASTRA — Stable build (Firebase compat, mic, TTS, daily history) === */
 window.addEventListener('error', e => {
   const logBox=document.getElementById('log'); if(!logBox) return;
   const p=document.createElement('p'); p.textContent = "❌ Script error: " + (e.message||e.filename||'unknown');
@@ -137,13 +138,47 @@ function updateFirebase() {
   }catch(e){ log("⚠️ Firebase set error: "+e.message); }
 }
 
+// 🗓️ YYYY-MM-DD (IST local) for history keys
+function todayKey() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// 📝 Push one event row into Firebase history
+function logEvent(kind, data = {}) {
+  try{
+    const day = todayKey();
+    return firebase.database().ref(`devices/history/${day}/events`).push({
+      kind,                // "light", "fan", "people", ...
+      ...data,             // { val: 1 }, { delta: +1, value: 3 }, etc.
+      ts: firebase.database.ServerValue.TIMESTAMP
+    });
+  }catch(e){
+    log("⚠️ logEvent error: " + e.message);
+  }
+}
+
 // live listener
 try{
   firebase.database().ref("devices/env").on('value', (snapshot) => {
     const data = snapshot.val();
     if (!data) return;
+
+    // Detect people delta BEFORE merge
+    const prevPeople = cache.people;
+
     cache = { ...cache, ...data };
     refreshTiles();
+
+    // Log people enter/exit if count changed
+    if (typeof prevPeople === 'number' && typeof cache.people === 'number' && prevPeople !== cache.people) {
+      const delta = cache.people - prevPeople;
+      logEvent('people', { delta, value: cache.people });
+    }
+
     log("📡 Synced live data from Firebase");
   });
 }catch(e){ log("⚠️ Firebase on() error: "+e.message); }
@@ -229,16 +264,80 @@ function intent(text){
   if( (s.includes("light")&&s.includes("off"))|| any("turn off light","switch off light","light off","turn the light off") ) return {type:"light",val:0};
   if( (s.includes("fan")&&s.includes("on"))   || any("turn on fan","switch on fan","fan on","turn the fan on") ){ if(!s.includes("off")) return {type:"fan",val:1}; }
   if( (s.includes("fan")&&s.includes("off"))  || any("turn off fan","switch off fan","fan off","turn the fan off") ) return {type:"fan",val:0};
+  if(/(today|daily|full day).*report/.test(s)) return {type:"todayReport"};
   if(any("report","summary","status")) return {type:"report"};
   if(any("stop","exit","quit")) return {type:"stop"};
   return {type:"say", text: naturalReply(s)};
 }
 
+/* ---------- Daily report aggregator ---------- */
+function fmtDur(ms){
+  const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);
+  return (h?`${h}h `:"") + `${m}m`;
+}
+
+async function buildTodayReportText(){
+  const day = todayKey();
+  const snap = await firebase.database().ref(`devices/history/${day}/events`).once('value');
+  const events = snap.val() || {};
+  const rows = Object.values(events).sort((a,b)=>(a.ts||0)-(b.ts||0));
+
+  let lightOnAt=null, fanOnAt=null;
+  let lightMs=0, fanMs=0;
+  let lightSwitches=0, fanSwitches=0;
+  let peopleCount = cache.people;
+  let entries=0, exits=0;
+
+  for (const ev of rows){
+    const t = ev.ts || 0;
+    if (ev.kind === 'light'){
+      lightSwitches++;
+      if (ev.val === 1){ if(lightOnAt==null) lightOnAt=t; }
+      else { if(lightOnAt!=null){ lightMs += (t - lightOnAt); lightOnAt=null; } }
+    }
+    if (ev.kind === 'fan'){
+      fanSwitches++;
+      if (ev.val === 1){ if(fanOnAt==null) fanOnAt=t; }
+      else { if(fanOnAt!=null){ fanMs += (t - fanOnAt); fanOnAt=null; } }
+    }
+    if (ev.kind === 'people'){
+      if (typeof ev.value === 'number') peopleCount = ev.value;
+      if (typeof ev.delta === 'number'){
+        if (ev.delta > 0) entries += ev.delta;
+        if (ev.delta < 0) exits   += Math.abs(ev.delta);
+      }
+    }
+  }
+  const now = Date.now();
+  if (lightOnAt!=null) lightMs += (now - lightOnAt);
+  if (fanOnAt  !=null) fanMs   += (now - fanOnAt);
+
+  const kwhLight = (lightMs/3600000)*(LIGHT_WATTS/1000);
+  const kwhFan   = (fanMs/3600000)*(FAN_WATTS/1000);
+  const kwhTotal = kwhLight + kwhFan;
+  const rupees   = kwhTotal * INR_PER_KWH;
+
+  return [
+    `Here’s your report for ${day}.`,
+    `Light: toggled ${lightSwitches} times, active ${fmtDur(lightMs)}.`,
+    `Fan: toggled ${fanSwitches} times, active ${fmtDur(fanMs)}.`,
+    `People: entries ${entries}, exits ${exits}, inside now ${peopleCount}.`,
+    `Estimated energy: ${kwhTotal.toFixed(3)} kWh (₹${rupees.toFixed(2)}).`
+  ].join(" ");
+}
+
+/* ---------- Actions ---------- */
 function setDevice(dev,val){
+  const prev = cache[dev];
   cache[dev] = val ? 1 : 0;
   counters.cmds++;
   refreshTiles();
   updateFirebase();
+
+  // log only on change
+  if (prev !== cache[dev]) {
+    logEvent(dev, { val: cache[dev] });  // e.g., {kind:"light", val:1}
+  }
   return val ? `Turning on the ${dev}.` : `Turning the ${dev} off.`;
 }
 
@@ -264,6 +363,10 @@ async function handleIntent(res, raw){
     case "people": { const msg=`People in room: ${cache.people}.`; remember(raw,msg); return speak(msg); }
     case "light": { const msg=setDevice("light",res.val); remember(raw,msg); return speak(msg); }
     case "fan":   { const msg=setDevice("fan",res.val);   remember(raw,msg); return speak(msg); }
+    case "todayReport": {
+      try { const msg = await buildTodayReportText(); return speak(msg); }
+      catch(e){ return speak("Sorry, I couldn't build today's report right now."); }
+    }
     case "report":{ const msg=report(); remember(raw,msg); return speak(msg); }
     case "stop": listening=false; try{ rec&&rec.stop(); }catch{}; return speak("Okay, I’ll be quiet now.");
   }
@@ -305,6 +408,10 @@ document.getElementById('btnLightOff').onclick= ()=>handleIntent({type:"light",v
 document.getElementById('btnFanOn').onclick   = ()=>handleIntent({type:"fan",val:1}, "button: fan on");
 document.getElementById('btnFanOff').onclick  = ()=>handleIntent({type:"fan",val:0}, "button: fan off");
 document.getElementById('btnReport').onclick  = ()=>handleIntent({type:"report"}, "button: report");
+document.getElementById('btnTodayReport').onclick = async () => {
+  try { const txt = await buildTodayReportText(); speak(txt); }
+  catch(e){ log("⚠️ Daily report error: " + e.message); speak("Sorry, I couldn't build the daily report right now."); }
+};
 const btnReset=document.getElementById('btnReset');
 if(btnReset){ btnReset.onclick=()=>{ finishRun('light'); finishRun('fan'); counters.cmds=0; counters.light_on_events=0; counters.fan_on_events=0; counters.light_ms=0; counters.fan_ms=0; counters.people_entries=0; refreshTiles(); speak("Done. I’ve reset the counters."); }; }
 
@@ -312,7 +419,7 @@ if(btnReset){ btnReset.onclick=()=>{ finishRun('light'); finishRun('fan'); count
 micBtn.addEventListener('click', ()=>{ if(!listening) startMic(); else stopMic(); });
 
 /* ---------- First paint ---------- */
-setTimeout(()=>{ refreshTiles(); lockVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, or turn the light on."); }, 350);
+setTimeout(()=>{ refreshTiles(); lockVoice(); speak("Hi Achal, I’m ready. You can say: how are you, tell me a joke, turn the light on, or say today’s report."); }, 350);
 window.addEventListener('load', ()=>{ setupMic(); });
 </script>
 </body>
