@@ -68,5 +68,4 @@ MIS & Business Reporting | Data Analytics | Business Analysis
 
 Building reporting systems, dashboards, and data-driven solutions that support business decision-making.
 
-- LinkedIn: https://www.linkedin.com/in/achal-sharma-89063336a
-- GitHub: https://github.com/achal-sharma01
+[LinkedIn](https://linkedin.com/in/achal-sharma-89063336a)
