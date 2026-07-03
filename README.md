@@ -71,9 +71,7 @@ The system was redesigned as a cloud-connected web application using Firebase an
 
 ## 📂 Project Documentation
 
-📑 **Project Presentation**
-
-- AI_Voice_Assistant_Project_Presentation.pdf
+📑 **Project Presentation:** [Astra AI Voice Assistant Presentation](Astra_AI_Voice_Assistant_Presentation.pdf)
 
 ---
 
