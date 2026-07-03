@@ -75,19 +75,11 @@ The system was redesigned as a cloud-connected web application using Firebase an
 
 ---
 
-## ▶ How to Run
+## ▶ Live Demo
 
-1. Clone the repository.
+Experience the application here:
 
-```bash
-git clone https://github.com/achal-sharma01/ai-voice-assistant.git
-```
-
-2. Open `index.html` in a supported browser.
-
-3. Allow microphone permission.
-
-4. Connect Firebase using your own configuration.
+https://achal-sharma01.github.io/Astra-AI-Voice-Assistant/
 
 ---
 
