@@ -51,12 +51,6 @@ Astra is an AI-powered voice assistant developed to automate smart room operatio
 
 ---
 
-## 📂 Project Documentation
-
-📑 **Project Presentation:** `AI_Voice_Assistant_Project_Presentation.pdf`
-
----
-
 ## 🚀 Future Enhancements
 
 - Integration with IoT devices and smart home ecosystems.
